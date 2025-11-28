@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Activity, Brain, TrendingUp, BarChart2, Clock, Plus, Trash2, Search, List, LineChart, ArrowUp, ArrowDown, ArrowUpDown, Wand2, WifiOff, Moon, Target, Wallet, Edit2, Save, User, Link as LinkIcon, Upload, Minus, RotateCcw, Calculator, XCircle, CircleDollarSign, Settings, MousePointer2 } from 'lucide-react';
+import { Activity, Brain, TrendingUp, BarChart2, Clock, Plus, Trash2, Search, List, LineChart, ArrowUp, ArrowDown, ArrowUpDown, Wand2, WifiOff, Moon, Target, Wallet, Edit2, Save, User, Link as LinkIcon, Upload, Minus, RotateCcw, Calculator, XCircle, CircleDollarSign, Settings } from 'lucide-react';
 
 // 1. 存储配置
 const CODES_KEY = 'WUKONG_CODES_V1';
 const PORTFOLIO_KEY = 'WUKONG_PORTFOLIO_V1';
-// 🛡️ [V12 核心] 
-const SIMULATION_KEY = 'WUKONG_SIM_GLOBAL_V2_FINAL'; 
+// 🛡️ [部署版 Key] 
+const SIMULATION_KEY = 'WUKONG_SIM_DEPLOY_V12_5'; 
 const DEFAULT_CODES = ['hk00700', 'sh600519', 'usNVDA', 'sz000001'];
 
 // --- 类型定义 ---
@@ -85,7 +85,8 @@ interface GenieSignal {
 
 // 🛡️ 工具：数值安全检查
 const safeNum = (val: any, fallback = 0) => {
-    return (typeof val === 'number' && isFinite(val) && !isNaN(val)) ? val : fallback;
+    const num = parseFloat(val);
+    return (typeof num === 'number' && isFinite(num) && !isNaN(num)) ? num : fallback;
 };
 
 // 🌟 量化计算引擎
@@ -167,7 +168,7 @@ const QuoteItem = ({ label, val, color = "text-gray-300" }: { label: string, val
   </div>
 );
 
-// 🛡️ [FIX] 修复 Props 类型，移除未使用的 stock
+// 信号强度可视化组件 (修复 Props 类型)
 const SignalStrengthVisual = ({ report }: { report: StrategyReport }) => {
   if (!report || !report.t0) return null; 
   
@@ -231,14 +232,20 @@ const SignalStrengthVisual = ({ report }: { report: StrategyReport }) => {
   );
 };
 
-// --- IntradayChart (纯净版) ---
+// --- IntradayChart (修复：恢复宽容的数据映射模式，解决显示为空的问题) ---
 const IntradayChart = React.memo(({ data = [], prevClose, code, t0Buy, t0Sell }: { data?: MinutePoint[], prevClose: number, code: string, t0Buy?: number | null, t0Sell?: number | null }) => {
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
 
   const validData = useMemo(() => {
     if (!Array.isArray(data) || data.length === 0) return [];
     const base = prevClose > 0 ? prevClose : (data[0].p || 1);
-    return data.map(d => ({ p: (isNaN(d.p)||d.p<=0)?base:d.p, v: (isNaN(d.v)||d.v<0)?0:d.v, t: d.t || '' }));
+    // 🛡️ 恢复 V11.4 的逻辑，只 map 不 filter，防止因字段缺失被过滤掉
+    // 但在 map 内部做 NaN 检查，保证安全
+    return data.map(d => ({ 
+        p: (isNaN(d.p) || d.p <= 0) ? base : d.p, 
+        v: (isNaN(d.v) || d.v < 0) ? 0 : d.v, 
+        t: d.t || '' 
+    }));
   }, [data, prevClose]);
 
   const avgLine = useMemo(() => {
@@ -282,29 +289,31 @@ const IntradayChart = React.memo(({ data = [], prevClose, code, t0Buy, t0Sell }:
   const padding = maxDiff === 0 ? effectivePrev * 0.005 : maxDiff * 1.2; 
   const top = effectivePrev + padding;
   const bottom = effectivePrev - padding;
-  const range = (top - bottom) || 1;
+  // 🛡️ Range 保护
+  const range = Math.max((top - bottom), 0.0001);
 
+  // 🛡️ 坐标计算层加 safeNum
   const points = validData.map((d, i) => {
     const safeIndex = Math.min(i, MAX_POINTS - 1);
-    const x = (safeIndex / (MAX_POINTS - 1)) * 100;
-    const y = 100 - ((d.p - bottom) / range) * 100;
+    const x = safeNum((safeIndex / (MAX_POINTS - 1)) * 100);
+    const y = safeNum(100 - ((d.p - bottom) / range) * 100, 50);
     return `${x},${y}`;
   }).join(' ');
 
   const avgPoints = avgLine.map((p, i) => {
     const safeIndex = Math.min(i, MAX_POINTS - 1);
-    const x = (safeIndex / (MAX_POINTS - 1)) * 100;
-    const y = 100 - ((p - bottom) / range) * 100;
+    const x = safeNum((safeIndex / (MAX_POINTS - 1)) * 100);
+    const y = safeNum(100 - ((p - bottom) / range) * 100, 50);
     return `${x},${y}`;
   }).join(' ');
 
-  const vwapY = 100 - ((vwap - bottom) / range) * 100;
+  const vwapY = safeNum(100 - ((vwap - bottom) / range) * 100, 50);
 
   const lastPoint = validData[validData.length - 1];
   const isUp = lastPoint.p >= effectivePrev;
   const strokeColor = isUp ? '#ef4444' : '#22c55e';
   const areaColor = isUp ? '#ef4444' : '#22c55e';
-  const lastXPercent = (Math.min(validData.length - 1, MAX_POINTS - 1) / (MAX_POINTS - 1)) * 100;
+  const lastXPercent = safeNum((Math.min(validData.length - 1, MAX_POINTS - 1) / (MAX_POINTS - 1)) * 100);
   const areaPoints = `0,100 ${points} ${lastXPercent},100`;
   
   let maxVol = Math.max(...validData.map(d => d.v)); if (maxVol === 0) maxVol = 1;
@@ -347,17 +356,17 @@ const IntradayChart = React.memo(({ data = [], prevClose, code, t0Buy, t0Sell }:
              <line x1="0" y1={50} x2="100" y2={50} stroke="#4b5563" strokeWidth="0.5" strokeDasharray="3 3" vectorEffect="non-scaling-stroke" opacity="0.5" />
              {/* VWAP Line */}
              <line x1="0" y1={vwapY} x2="100" y2={vwapY} stroke="#8b5cf6" strokeWidth="1" strokeDasharray="4 2" vectorEffect="non-scaling-stroke" opacity="0.7" />
-             {/* T0 Buy/Sell Lines */}
-             {t0Buy && t0Buy > bottom && t0Buy < top && <line x1="0" y1={100 - ((t0Buy - bottom) / range) * 100} x2="100" y2={100 - ((t0Buy - bottom) / range) * 100} stroke="#10b981" strokeWidth="1" strokeDasharray="2 3" vectorEffect="non-scaling-stroke" opacity="0.6" />}
-             {t0Sell && t0Sell > bottom && t0Sell < top && <line x1="0" y1={100 - ((t0Sell - bottom) / range) * 100} x2="100" y2={100 - ((t0Sell - bottom) / range) * 100} stroke="#ef4444" strokeWidth="1" strokeDasharray="2 3" vectorEffect="non-scaling-stroke" opacity="0.6" />}
+             {/* T0 Buy/Sell Lines (Safe Check) */}
+             {t0Buy && t0Buy > bottom && t0Buy < top && <line x1="0" y1={safeNum(100 - ((t0Buy - bottom) / range) * 100)} x2="100" y2={safeNum(100 - ((t0Buy - bottom) / range) * 100)} stroke="#10b981" strokeWidth="1" strokeDasharray="2 3" vectorEffect="non-scaling-stroke" opacity="0.6" />}
+             {t0Sell && t0Sell > bottom && t0Sell < top && <line x1="0" y1={safeNum(100 - ((t0Sell - bottom) / range) * 100)} x2="100" y2={safeNum(100 - ((t0Sell - bottom) / range) * 100)} stroke="#ef4444" strokeWidth="1" strokeDasharray="2 3" vectorEffect="non-scaling-stroke" opacity="0.6" />}
              
              <polygon points={areaPoints} fill={`url(#grad-${isUp?'up':'down'})`} />
              <polyline points={points} fill="none" stroke={strokeColor} strokeWidth="1.5" vectorEffect="non-scaling-stroke" strokeLinejoin="round"/>
              <polyline points={avgPoints} fill="none" stroke="#eab308" strokeWidth="1" strokeDasharray="2 2" vectorEffect="non-scaling-stroke" opacity="0.8"/>
              {hoverIdx !== null && (
                <g>
-                  <line x1={(hoverIdx / (MAX_POINTS - 1)) * 100} y1="0" x2={(hoverIdx / (MAX_POINTS - 1)) * 100} y2="100" stroke="#60a5fa" strokeWidth="1" strokeDasharray="2 2" vectorEffect="non-scaling-stroke"/>
-                  <line x1="0" y1={100 - ((hoverData!.p - bottom) / range) * 100} x2="100" y2={100 - ((hoverData!.p - bottom) / range) * 100} stroke="#60a5fa" strokeWidth="1" strokeDasharray="2 2" vectorEffect="non-scaling-stroke"/>
+                  <line x1={safeNum((hoverIdx / (MAX_POINTS - 1)) * 100)} y1="0" x2={safeNum((hoverIdx / (MAX_POINTS - 1)) * 100)} y2="100" stroke="#60a5fa" strokeWidth="1" strokeDasharray="2 2" vectorEffect="non-scaling-stroke"/>
+                  <line x1="0" y1={safeNum(100 - ((hoverData!.p - bottom) / range) * 100)} x2="100" y2={safeNum(100 - ((hoverData!.p - bottom) / range) * 100)} stroke="#60a5fa" strokeWidth="1" strokeDasharray="2 2" vectorEffect="non-scaling-stroke"/>
                </g>
              )}
           </svg>
@@ -368,9 +377,9 @@ const IntradayChart = React.memo(({ data = [], prevClose, code, t0Buy, t0Sell }:
                const safeIndex = Math.min(i, MAX_POINTS - 1);
                const prevP = i > 0 ? validData[i-1].p : effectivePrev;
                const barColor = d.p > prevP ? '#ef4444' : d.p < prevP ? '#22c55e' : '#6b7280';
-               const barHeight = (d.v / maxVol) * 100;
-               const x = (safeIndex / (MAX_POINTS - 1)) * 100;
-               const w = (100 / MAX_POINTS) * 0.6; 
+               const barHeight = safeNum((d.v / maxVol) * 100);
+               const x = safeNum((safeIndex / (MAX_POINTS - 1)) * 100);
+               const w = safeNum((100 / MAX_POINTS) * 0.6); 
                return ( <rect key={i} x={x} y={100 - barHeight} width={w} height={barHeight} fill={barColor} opacity={hoverIdx === i ? 1 : 0.8} /> )
              })}
           </svg>
@@ -420,7 +429,7 @@ const CandleChart = React.memo(({ data = [], subChartMode, setSubChartMode }: { 
 
   let max = 0, min = Infinity;
   displayData.forEach(d => { max = Math.max(max, d.high); min = Math.min(min, d.low); });
-  [...displayMA5, ...displayMA10, ...displayMA20].forEach(v => { if (v) { max = Math.max(max, v); min = Math.min(min, v); }});
+  [...displayMA5, ...displayMA10, ...displayMA20].forEach(v => { if (v && isFinite(v)) { max = Math.max(max, v); min = Math.min(min, v); }});
 
   const range = max - min;
   const renderMax = max + (range * 0.05);
@@ -430,16 +439,21 @@ const CandleChart = React.memo(({ data = [], subChartMode, setSubChartMode }: { 
   const gap = barWidth * 0.25;
 
   let maxVol = 0; displayData.forEach(d => maxVol = Math.max(maxVol, d.vol));
+  if (maxVol === 0) maxVol = 1; 
+
   let maxMACD = 0, minMACD = 0;
-  [...displayDIF, ...displayDEA, ...displayMACDBar].forEach(v => { maxMACD = Math.max(maxMACD, v); minMACD = Math.min(minMACD, v); });
+  [...displayDIF, ...displayDEA, ...displayMACDBar].forEach(v => { 
+      if(isFinite(v)) { maxMACD = Math.max(maxMACD, v); minMACD = Math.min(minMACD, v); }
+  });
   const absMaxMACD = Math.max(Math.abs(maxMACD), Math.abs(minMACD));
-  const macdRange = absMaxMACD * 2.2;
+  const macdRange = Math.max(absMaxMACD * 2.2, 1); 
 
   const getLinePoints = (arr: (number|null)[], minY: number, rng: number, zeroAtCenter: boolean = false) => {
     return arr.map((val, i) => {
-      if (val === null) return null;
-      const x = i * barWidth + barWidth / 2;
-      const y = zeroAtCenter ? 50 - (val / rng) * 100 : 100 - ((val - minY) / rng) * 100;
+      if (val === null || !isFinite(val)) return null;
+      const x = safeNum(i * barWidth + barWidth / 2);
+      const rawY = zeroAtCenter ? 50 - (val / rng) * 100 : 100 - ((val - minY) / rng) * 100;
+      const y = safeNum(rawY, 50);
       return `${x},${y}`;
     }).filter(Boolean).join(' ');
   };
@@ -574,7 +588,7 @@ export default function App() {
     } catch { return {}; }
   });
   
-  // 🛡️ [安全初始化] 
+  // 🛡️ [安全初始化]
   const [simState, setSimState] = useState<GlobalSimState>(() => {
     try {
         const stored = localStorage.getItem(SIMULATION_KEY);
@@ -601,7 +615,6 @@ export default function App() {
   const [draggedCode, setDraggedCode] = useState<string | null>(null);
   const [dragOverCode, setDragOverCode] = useState<string | null>(null);
   const [mobileTab, setMobileTab] = useState<'LIST' | 'CHART' | 'AI'>('CHART');
-  const [copied, setCopied] = useState(false);
   const [isSorting, setIsSorting] = useState(false);
   const [isGenieMode, setIsGenieMode] = useState(false);
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
@@ -620,13 +633,9 @@ export default function App() {
   const [tempCapital, setTempCapital] = useState('');
 
   const requestIdRef = useRef(0);
-  // 🛡️ [V12.4 修复] 补回丢失的 Ref 定义
-  const lastSelectedCodeRef = useRef<string>('');
-  const lastSignalRef = useRef<Record<string, string>>({});
 
   useEffect(() => { localStorage.setItem(CODES_KEY, JSON.stringify(codes)); }, [codes]);
   useEffect(() => { localStorage.setItem(PORTFOLIO_KEY, JSON.stringify(portfolio)); }, [portfolio]);
-  // 🛡️ [安全存储]
   useEffect(() => { localStorage.setItem(SIMULATION_KEY, JSON.stringify(simState)); }, [simState]);
   
   useEffect(() => { if (!selectedCode && codes.length > 0) setSelectedCode(codes[0]); }, [codes, selectedCode]);
@@ -650,30 +659,13 @@ export default function App() {
       }
   }, [selectedCode]);
 
-  // 🔊 信号触发逻辑
-  useEffect(() => {
-      stocks.forEach(s => {
-          const signal = GenieEngine.analyze(s);
-          const lastType = lastSignalRef.current[s.code];
-          
-          if (signal) {
-              if (signal.type !== lastType) {
-                  lastSignalRef.current[s.code] = signal.type;
-              }
-          } else {
-              if (lastType) delete lastSignalRef.current[s.code];
-          }
-      });
-  }, [stocks]); 
-
   const generateSyncLink = () => {
       const data = { codes, portfolio };
       const str = btoa(JSON.stringify(data));
       const url = `${window.location.origin}${window.location.pathname}?sync=${encodeURIComponent(str)}`;
       setSyncLink(url);
       navigator.clipboard.writeText(url);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setTimeout(() => {}, 2000);
   };
 
   const savePortfolio = () => {
@@ -690,16 +682,10 @@ export default function App() {
       setIsEditingPortfolio(false);
   };
 
-  const handleShare = () => {
-    const url = new URL(window.location.href);
-    url.searchParams.set('q', codes.join(','));
-    navigator.clipboard.writeText(url.toString()).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
-  };
-
   const moveStock = (index: number, direction: 'UP' | 'DOWN') => {
     const newCodes = [...codes];
     if (direction === 'UP' && index > 0) { [newCodes[index], newCodes[index - 1]] = [newCodes[index - 1], newCodes[index]]; } 
-    else if (direction === 'DOWN' && index < newCodes.length - 1) { [newCodes[index], newCodes[index + 1]] = [newCodes[index + 1], newCodes[index]]; }
+    else if (direction === 'DOWN' && index < newCodes.length - 1) { [newCodes[index], newCodes[index + 1]] = [newCodes[index + 1]] = [newCodes[index + 1], newCodes[index]]; }
     setCodes(newCodes);
   };
 
@@ -995,7 +981,7 @@ export default function App() {
           return;
       }
       
-      // 🛡️ 高价买入预警 (加非空断言)
+      // 🛡️ 高价买入预警
       if (type === 'BUY' && selStock && price > selStock.price) {
           if (!confirm(`⚠️ 警告：您的买入价 ${price} 高于当前价 ${selStock.price}，将可能以较高成本成交。\n\n是否继续？`)) {
               return;
@@ -1231,16 +1217,8 @@ export default function App() {
   };
 
   const currentSimPos = simState.positions[selectedCode];
-  const simPnl = useMemo(() => {
-      if (!selStock || !currentSimPos || currentSimPos.holding === 0) return null;
-      const marketVal = selStock.price * currentSimPos.holding;
-      const costVal = currentSimPos.avgCost * currentSimPos.holding;
-      const val = marketVal - costVal;
-      const pct = costVal > 0 ? (val / costVal) * 100 : 0;
-      return { val, pct };
-  }, [selStock, currentSimPos]);
   
-  // 🛡️ [修复] 补回 stockPerformance 逻辑，解决模拟面板显示问题
+  // V12: 升级后的个股盈亏计算
   const stockPerformance = useMemo(() => {
       if (!selStock) return null;
       
@@ -1269,7 +1247,6 @@ export default function App() {
       Object.keys(simState.positions).forEach(code => {
           const pos = simState.positions[code];
           const stock = stocks.find(s => s.code === code);
-          // 🛡️ 价格防御
           const currentPrice = stock ? stock.price : pos.avgCost; 
           totalMarketValue += pos.holding * currentPrice;
       });
@@ -1282,7 +1259,7 @@ export default function App() {
     <div className="fixed inset-0 supports-[height:100dvh]:h-[100dvh] bg-[#0f1115] text-gray-300 font-sans flex flex-col overflow-hidden select-none">
       <header className="h-12 border-b border-gray-800 bg-[#161920] flex items-center justify-between px-4 z-10 shrink-0">
          <div className="flex items-center gap-2 text-emerald-400 font-bold tracking-widest">
-            <Activity size={18}/> WUKONG PRO <span className="bg-blue-600 text-white text-[9px] px-1.5 rounded">V12.4</span>
+            <Activity size={18}/> WUKONG PRO <span className="bg-blue-600 text-white text-[9px] px-1.5 rounded">V12.5</span>
          </div>
          
          <div className="flex gap-3 items-center">
@@ -1372,7 +1349,6 @@ export default function App() {
                {codes.map((c, index) => {
                  const s = stocks.find(item => item.code === c);
                  const genieSignal = s ? GenieEngine.analyze(s) : null;
-                 // [V12.1] 列表渲染信号
                  if (isGenieMode && !genieSignal) return null;
 
                  return (
@@ -1386,16 +1362,10 @@ export default function App() {
                      <div className="flex justify-between items-center mb-1">
                         <div className="flex items-center gap-1 overflow-hidden">
                            <span className="font-bold text-gray-200 text-xs truncate max-w-[4.5rem]">{s ? s.name : c}</span>
-                           {/* [V12.1] 信号标签 */}
-                           {genieSignal && (
-                               <div className="flex flex-col ml-1">
-                                   <span className={`text-[9px] px-1 rounded border shrink-0 ${genieSignal.color}`}>{genieSignal.label}</span>
-                               </div>
-                           )}
+                           {genieSignal && <span className={`text-[9px] px-1 rounded border shrink-0 ${genieSignal.color}`}>{genieSignal.label}</span>}
                         </div>
                         {s && <span className={`text-xs font-bold ${s.changePercent>=0?'text-red-400':'text-green-400'}`}>{s.changePercent}%</span>}
                      </div>
-                     {/* [V12.2] 安全的时空标记 */}
                      {genieSignal && (
                          <div className="flex justify-between items-center mb-1 text-[8px] text-gray-500 bg-gray-800/30 px-1 py-0.5 rounded">
                              <span>{genieSignal.triggerTime}</span>
@@ -1445,7 +1415,7 @@ export default function App() {
                 <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
                    <div className="flex-[1.5] md:flex-1 md:min-h-[180px] relative border-b border-gray-800">
                       <div className="absolute top-2 left-2 z-10 flex items-center gap-1 text-[10px] text-gray-500 pointer-events-none"><TrendingUp size={10}/> 分时走势</div>
-                      {/* V12.2: 纯净图表 */}
+                      {/* V12.5: 纯净图表，防白屏 */}
                       <IntradayChart data={selStock.minuteData} prevClose={selStock.prevClose} code={selStock.code} t0Buy={report?.t0.buyPoint} t0Sell={report?.t0.sellPoint} />
                    </div>
                    <div className="flex-1 md:min-h-[150px] relative bg-[#0b0c10]">
@@ -1541,7 +1511,7 @@ export default function App() {
                                     <div className="text-sm font-mono text-green-400 font-bold">{report.t0.sellPoint ? report.t0.sellPoint.toFixed(2) : '--'}</div>
                                 </div>
                             </div>
-                            <SignalStrengthVisual report={report} />
+                            <SignalStrengthVisual stock={selStock} report={report} />
                         </div>
                         <div className="p-3 rounded border border-blue-900/30 bg-blue-900/10">
                             <div className="text-[10px] text-blue-400 mb-1 font-bold">策略逻辑</div>
