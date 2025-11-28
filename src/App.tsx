@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Activity, Brain, TrendingUp, BarChart2, Clock, Plus, Trash2, Search, List, LineChart, ArrowUp, ArrowDown, ArrowUpDown, Wand2, WifiOff, Moon, Target, Wallet, Edit2, Save, User, Link as LinkIcon, Upload, Minus, RotateCcw, Calculator, XCircle, CircleDollarSign, Settings } from 'lucide-react';
+import { Activity, Zap, Brain, TrendingUp, BarChart2, Clock, Plus, Trash2, Shield, Search, MousePointer2, List, LineChart, Share2, Check, ArrowUp, ArrowDown, ArrowUpDown, Wand2, AlertCircle, WifiOff, Moon, Target, TrendingDown, DollarSign, Crosshair, Anchor, Wallet, Edit2, Save, User, Link as LinkIcon, Copy, Upload, Minus, Info, Lightbulb, PlayCircle, PauseCircle, RotateCcw, Calculator, Coins, XCircle, RefreshCw, CircleDollarSign, Settings } from 'lucide-react';
 
 // 1. 存储配置
 const CODES_KEY = 'WUKONG_CODES_V1';
 const PORTFOLIO_KEY = 'WUKONG_PORTFOLIO_V1';
-// 🛡️ [部署版 Key] 
-const SIMULATION_KEY = 'WUKONG_SIM_DEPLOY_V12_5'; 
+// 🛡️ [V12 升级] 数据结构升级，使用新 Key 确保数据纯净
+const SIMULATION_KEY = 'WUKONG_SIM_V12_PRO'; 
 const DEFAULT_CODES = ['hk00700', 'sh600519', 'usNVDA', 'sz000001'];
 
 // --- 类型定义 ---
@@ -38,10 +38,11 @@ interface PendingOrder {
   type: 'BUY' | 'SELL';
 }
 
+// [V12] 个股持仓结构升级：增加 accumulatedPnl (已结盈亏)
 interface SimPosition {
   holding: number;   
   avgCost: number;   
-  realizedPnl: number;
+  realizedPnl: number; // [NEW] 该股的历史累计已实现盈亏
   trades: SimTrade[]; 
   pending: PendingOrder[]; 
 }
@@ -74,19 +75,9 @@ interface StrategyReport {
   holding: { pnl: number; pnlPercent: number; advice: string; } | null;
 }
 
-// [V12.1] 信号结构
-interface GenieSignal {
-    type: 'RISING' | 'HOT' | 'PANIC';
-    label: string;
-    color: string;
-    triggerTime: string; 
-    triggerPrice: number; 
-}
-
 // 🛡️ 工具：数值安全检查
 const safeNum = (val: any, fallback = 0) => {
-    const num = parseFloat(val);
-    return (typeof num === 'number' && isFinite(num) && !isNaN(num)) ? num : fallback;
+    return (typeof val === 'number' && isFinite(val) && !isNaN(val)) ? val : fallback;
 };
 
 // 🌟 量化计算引擎
@@ -141,22 +132,12 @@ const TechIndicators = {
 
 // 🌟 精灵信号判定引擎
 const GenieEngine = {
-  analyze: (s: RealStock): GenieSignal | null => {
+  analyze: (s: RealStock) => {
     const isUS = s.code.startsWith('us');
     const turnoverLimit = isUS ? 0.5 : 2;
-    
-    const now = new Date();
-    const timeStr = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
-
-    if (s.changePercent > 2 && s.turnover > turnoverLimit) {
-        return { type: 'RISING', label: '🚀 拉升', color: 'text-purple-400 bg-purple-900/20 border-purple-800', triggerTime: timeStr, triggerPrice: s.price };
-    }
-    if (s.changePercent > 0 && s.turnover > (turnoverLimit * 2.5)) {
-        return { type: 'HOT', label: '🔥 抢筹', color: 'text-orange-400 bg-orange-900/20 border-orange-800', triggerTime: timeStr, triggerPrice: s.price };
-    }
-    if (s.changePercent < -3 && s.turnover > (turnoverLimit * 1.5)) {
-        return { type: 'PANIC', label: '💀 出逃', color: 'text-blue-400 bg-blue-900/20 border-blue-800', triggerTime: timeStr, triggerPrice: s.price };
-    }
+    if (s.changePercent > 2 && s.turnover > turnoverLimit) return { type: 'RISING', label: '🚀拉升', color: 'text-purple-400 bg-purple-900/20 border-purple-800' };
+    if (s.changePercent > 0 && s.turnover > (turnoverLimit * 2.5)) return { type: 'HOT', label: '🔥抢筹', color: 'text-orange-400 bg-orange-900/20 border-orange-800' };
+    if (s.changePercent < -3 && s.turnover > (turnoverLimit * 1.5)) return { type: 'PANIC', label: '💀出逃', color: 'text-blue-400 bg-blue-900/20 border-blue-800' };
     return null;
   }
 };
@@ -168,8 +149,8 @@ const QuoteItem = ({ label, val, color = "text-gray-300" }: { label: string, val
   </div>
 );
 
-// 信号强度可视化组件 (修复 Props 类型)
-const SignalStrengthVisual = ({ report }: { report: StrategyReport }) => {
+// 信号强度可视化组件
+const SignalStrengthVisual = ({ stock, report }: { stock: RealStock; report: StrategyReport }) => {
   if (!report || !report.t0) return null; 
   
   const strengthVal = safeNum(report.t0.strength, 0);
@@ -232,20 +213,14 @@ const SignalStrengthVisual = ({ report }: { report: StrategyReport }) => {
   );
 };
 
-// --- IntradayChart (修复：恢复宽容的数据映射模式，解决显示为空的问题) ---
+// --- IntradayChart (纯净版) ---
 const IntradayChart = React.memo(({ data = [], prevClose, code, t0Buy, t0Sell }: { data?: MinutePoint[], prevClose: number, code: string, t0Buy?: number | null, t0Sell?: number | null }) => {
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
 
   const validData = useMemo(() => {
     if (!Array.isArray(data) || data.length === 0) return [];
     const base = prevClose > 0 ? prevClose : (data[0].p || 1);
-    // 🛡️ 恢复 V11.4 的逻辑，只 map 不 filter，防止因字段缺失被过滤掉
-    // 但在 map 内部做 NaN 检查，保证安全
-    return data.map(d => ({ 
-        p: (isNaN(d.p) || d.p <= 0) ? base : d.p, 
-        v: (isNaN(d.v) || d.v < 0) ? 0 : d.v, 
-        t: d.t || '' 
-    }));
+    return data.map(d => ({ p: (isNaN(d.p)||d.p<=0)?base:d.p, v: (isNaN(d.v)||d.v<0)?0:d.v, t: d.t || '' }));
   }, [data, prevClose]);
 
   const avgLine = useMemo(() => {
@@ -289,31 +264,29 @@ const IntradayChart = React.memo(({ data = [], prevClose, code, t0Buy, t0Sell }:
   const padding = maxDiff === 0 ? effectivePrev * 0.005 : maxDiff * 1.2; 
   const top = effectivePrev + padding;
   const bottom = effectivePrev - padding;
-  // 🛡️ Range 保护
-  const range = Math.max((top - bottom), 0.0001);
+  const range = (top - bottom) || 1;
 
-  // 🛡️ 坐标计算层加 safeNum
   const points = validData.map((d, i) => {
     const safeIndex = Math.min(i, MAX_POINTS - 1);
-    const x = safeNum((safeIndex / (MAX_POINTS - 1)) * 100);
-    const y = safeNum(100 - ((d.p - bottom) / range) * 100, 50);
+    const x = (safeIndex / (MAX_POINTS - 1)) * 100;
+    const y = 100 - ((d.p - bottom) / range) * 100;
     return `${x},${y}`;
   }).join(' ');
 
   const avgPoints = avgLine.map((p, i) => {
     const safeIndex = Math.min(i, MAX_POINTS - 1);
-    const x = safeNum((safeIndex / (MAX_POINTS - 1)) * 100);
-    const y = safeNum(100 - ((p - bottom) / range) * 100, 50);
+    const x = (safeIndex / (MAX_POINTS - 1)) * 100;
+    const y = 100 - ((p - bottom) / range) * 100;
     return `${x},${y}`;
   }).join(' ');
 
-  const vwapY = safeNum(100 - ((vwap - bottom) / range) * 100, 50);
+  const vwapY = 100 - ((vwap - bottom) / range) * 100;
 
   const lastPoint = validData[validData.length - 1];
   const isUp = lastPoint.p >= effectivePrev;
   const strokeColor = isUp ? '#ef4444' : '#22c55e';
   const areaColor = isUp ? '#ef4444' : '#22c55e';
-  const lastXPercent = safeNum((Math.min(validData.length - 1, MAX_POINTS - 1) / (MAX_POINTS - 1)) * 100);
+  const lastXPercent = (Math.min(validData.length - 1, MAX_POINTS - 1) / (MAX_POINTS - 1)) * 100;
   const areaPoints = `0,100 ${points} ${lastXPercent},100`;
   
   let maxVol = Math.max(...validData.map(d => d.v)); if (maxVol === 0) maxVol = 1;
@@ -356,17 +329,17 @@ const IntradayChart = React.memo(({ data = [], prevClose, code, t0Buy, t0Sell }:
              <line x1="0" y1={50} x2="100" y2={50} stroke="#4b5563" strokeWidth="0.5" strokeDasharray="3 3" vectorEffect="non-scaling-stroke" opacity="0.5" />
              {/* VWAP Line */}
              <line x1="0" y1={vwapY} x2="100" y2={vwapY} stroke="#8b5cf6" strokeWidth="1" strokeDasharray="4 2" vectorEffect="non-scaling-stroke" opacity="0.7" />
-             {/* T0 Buy/Sell Lines (Safe Check) */}
-             {t0Buy && t0Buy > bottom && t0Buy < top && <line x1="0" y1={safeNum(100 - ((t0Buy - bottom) / range) * 100)} x2="100" y2={safeNum(100 - ((t0Buy - bottom) / range) * 100)} stroke="#10b981" strokeWidth="1" strokeDasharray="2 3" vectorEffect="non-scaling-stroke" opacity="0.6" />}
-             {t0Sell && t0Sell > bottom && t0Sell < top && <line x1="0" y1={safeNum(100 - ((t0Sell - bottom) / range) * 100)} x2="100" y2={safeNum(100 - ((t0Sell - bottom) / range) * 100)} stroke="#ef4444" strokeWidth="1" strokeDasharray="2 3" vectorEffect="non-scaling-stroke" opacity="0.6" />}
+             {/* T0 Buy/Sell Lines */}
+             {t0Buy && t0Buy > bottom && t0Buy < top && <line x1="0" y1={100 - ((t0Buy - bottom) / range) * 100} x2="100" y2={100 - ((t0Buy - bottom) / range) * 100} stroke="#10b981" strokeWidth="1" strokeDasharray="2 3" vectorEffect="non-scaling-stroke" opacity="0.6" />}
+             {t0Sell && t0Sell > bottom && t0Sell < top && <line x1="0" y1={100 - ((t0Sell - bottom) / range) * 100} x2="100" y2={100 - ((t0Sell - bottom) / range) * 100} stroke="#ef4444" strokeWidth="1" strokeDasharray="2 3" vectorEffect="non-scaling-stroke" opacity="0.6" />}
              
              <polygon points={areaPoints} fill={`url(#grad-${isUp?'up':'down'})`} />
              <polyline points={points} fill="none" stroke={strokeColor} strokeWidth="1.5" vectorEffect="non-scaling-stroke" strokeLinejoin="round"/>
              <polyline points={avgPoints} fill="none" stroke="#eab308" strokeWidth="1" strokeDasharray="2 2" vectorEffect="non-scaling-stroke" opacity="0.8"/>
              {hoverIdx !== null && (
                <g>
-                  <line x1={safeNum((hoverIdx / (MAX_POINTS - 1)) * 100)} y1="0" x2={safeNum((hoverIdx / (MAX_POINTS - 1)) * 100)} y2="100" stroke="#60a5fa" strokeWidth="1" strokeDasharray="2 2" vectorEffect="non-scaling-stroke"/>
-                  <line x1="0" y1={safeNum(100 - ((hoverData!.p - bottom) / range) * 100)} x2="100" y2={safeNum(100 - ((hoverData!.p - bottom) / range) * 100)} stroke="#60a5fa" strokeWidth="1" strokeDasharray="2 2" vectorEffect="non-scaling-stroke"/>
+                  <line x1={(hoverIdx / (MAX_POINTS - 1)) * 100} y1="0" x2={(hoverIdx / (MAX_POINTS - 1)) * 100} y2="100" stroke="#60a5fa" strokeWidth="1" strokeDasharray="2 2" vectorEffect="non-scaling-stroke"/>
+                  <line x1="0" y1={100 - ((hoverData!.p - bottom) / range) * 100} x2="100" y2={100 - ((hoverData!.p - bottom) / range) * 100} stroke="#60a5fa" strokeWidth="1" strokeDasharray="2 2" vectorEffect="non-scaling-stroke"/>
                </g>
              )}
           </svg>
@@ -377,9 +350,9 @@ const IntradayChart = React.memo(({ data = [], prevClose, code, t0Buy, t0Sell }:
                const safeIndex = Math.min(i, MAX_POINTS - 1);
                const prevP = i > 0 ? validData[i-1].p : effectivePrev;
                const barColor = d.p > prevP ? '#ef4444' : d.p < prevP ? '#22c55e' : '#6b7280';
-               const barHeight = safeNum((d.v / maxVol) * 100);
-               const x = safeNum((safeIndex / (MAX_POINTS - 1)) * 100);
-               const w = safeNum((100 / MAX_POINTS) * 0.6); 
+               const barHeight = (d.v / maxVol) * 100;
+               const x = (safeIndex / (MAX_POINTS - 1)) * 100;
+               const w = (100 / MAX_POINTS) * 0.6; 
                return ( <rect key={i} x={x} y={100 - barHeight} width={w} height={barHeight} fill={barColor} opacity={hoverIdx === i ? 1 : 0.8} /> )
              })}
           </svg>
@@ -429,7 +402,7 @@ const CandleChart = React.memo(({ data = [], subChartMode, setSubChartMode }: { 
 
   let max = 0, min = Infinity;
   displayData.forEach(d => { max = Math.max(max, d.high); min = Math.min(min, d.low); });
-  [...displayMA5, ...displayMA10, ...displayMA20].forEach(v => { if (v && isFinite(v)) { max = Math.max(max, v); min = Math.min(min, v); }});
+  [...displayMA5, ...displayMA10, ...displayMA20].forEach(v => { if (v) { max = Math.max(max, v); min = Math.min(min, v); }});
 
   const range = max - min;
   const renderMax = max + (range * 0.05);
@@ -439,21 +412,16 @@ const CandleChart = React.memo(({ data = [], subChartMode, setSubChartMode }: { 
   const gap = barWidth * 0.25;
 
   let maxVol = 0; displayData.forEach(d => maxVol = Math.max(maxVol, d.vol));
-  if (maxVol === 0) maxVol = 1; 
-
   let maxMACD = 0, minMACD = 0;
-  [...displayDIF, ...displayDEA, ...displayMACDBar].forEach(v => { 
-      if(isFinite(v)) { maxMACD = Math.max(maxMACD, v); minMACD = Math.min(minMACD, v); }
-  });
+  [...displayDIF, ...displayDEA, ...displayMACDBar].forEach(v => { maxMACD = Math.max(maxMACD, v); minMACD = Math.min(minMACD, v); });
   const absMaxMACD = Math.max(Math.abs(maxMACD), Math.abs(minMACD));
-  const macdRange = Math.max(absMaxMACD * 2.2, 1); 
+  const macdRange = absMaxMACD * 2.2;
 
   const getLinePoints = (arr: (number|null)[], minY: number, rng: number, zeroAtCenter: boolean = false) => {
     return arr.map((val, i) => {
-      if (val === null || !isFinite(val)) return null;
-      const x = safeNum(i * barWidth + barWidth / 2);
-      const rawY = zeroAtCenter ? 50 - (val / rng) * 100 : 100 - ((val - minY) / rng) * 100;
-      const y = safeNum(rawY, 50);
+      if (val === null) return null;
+      const x = i * barWidth + barWidth / 2;
+      const y = zeroAtCenter ? 50 - (val / rng) * 100 : 100 - ((val - minY) / rng) * 100;
       return `${x},${y}`;
     }).filter(Boolean).join(' ');
   };
@@ -599,7 +567,7 @@ export default function App() {
                 Object.keys(parsed.positions).forEach(k => {
                    if (!Array.isArray(parsed.positions[k].trades)) parsed.positions[k].trades = [];
                    if (!Array.isArray(parsed.positions[k].pending)) parsed.positions[k].pending = [];
-                   // V12 字段初始化
+                   // V12 新增字段初始化
                    if (typeof parsed.positions[k].realizedPnl !== 'number') parsed.positions[k].realizedPnl = 0;
                 });
                 return parsed;
@@ -615,6 +583,7 @@ export default function App() {
   const [draggedCode, setDraggedCode] = useState<string | null>(null);
   const [dragOverCode, setDragOverCode] = useState<string | null>(null);
   const [mobileTab, setMobileTab] = useState<'LIST' | 'CHART' | 'AI'>('CHART');
+  const [copied, setCopied] = useState(false);
   const [isSorting, setIsSorting] = useState(false);
   const [isGenieMode, setIsGenieMode] = useState(false);
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
@@ -633,6 +602,7 @@ export default function App() {
   const [tempCapital, setTempCapital] = useState('');
 
   const requestIdRef = useRef(0);
+  const lastSelectedCodeRef = useRef<string>('');
 
   useEffect(() => { localStorage.setItem(CODES_KEY, JSON.stringify(codes)); }, [codes]);
   useEffect(() => { localStorage.setItem(PORTFOLIO_KEY, JSON.stringify(portfolio)); }, [portfolio]);
@@ -665,7 +635,8 @@ export default function App() {
       const url = `${window.location.origin}${window.location.pathname}?sync=${encodeURIComponent(str)}`;
       setSyncLink(url);
       navigator.clipboard.writeText(url);
-      setTimeout(() => {}, 2000);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
   };
 
   const savePortfolio = () => {
@@ -680,6 +651,12 @@ export default function App() {
           setPortfolio(next);
       }
       setIsEditingPortfolio(false);
+  };
+
+  const handleShare = () => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('q', codes.join(','));
+    navigator.clipboard.writeText(url.toString()).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
   };
 
   const moveStock = (index: number, direction: 'UP' | 'DOWN') => {
@@ -716,7 +693,6 @@ export default function App() {
       const res = await fetch(`/api/q=${codes.join(',')}&_t=${Date.now()}`, { signal: controller.signal }); 
       clearTimeout(timeoutId);
       
-      // 🛡️ [核心修复]：拦截 HTML 响应，防止 JSON.parse 崩溃
       const buffer = await res.arrayBuffer();
       let text = '';
       try {
@@ -724,8 +700,6 @@ export default function App() {
       } catch (e) {
         text = new TextDecoder('utf-8').decode(buffer);
       }
-      
-      if (text.includes('<html>') || text.includes('<!DOCTYPE html>')) return;
 
       if (currentId !== requestIdRef.current) return;
 
@@ -757,9 +731,6 @@ export default function App() {
     if (code !== lastSelectedCodeRef.current) return;
     try {
       const res = await fetch(`/kline/appstock/app/minute/query?code=${code}&_t=${Date.now()}`);
-      const contentType = res.headers.get('content-type');
-      if (contentType && contentType.includes('text/html')) return;
-
       const json = await res.json();
       
       if (code !== lastSelectedCodeRef.current) return;
@@ -788,9 +759,6 @@ export default function App() {
       const isUS = code.startsWith('us');
       const params = isUS ? `${code},day,,,320` : `${code},day,,,320,qfq`;
       const res = await fetch(`/kline/appstock/app/fqkline/get?param=${params}&_t=${Date.now()}`);
-      const contentType = res.headers.get('content-type');
-      if (contentType && contentType.includes('text/html')) return;
-      
       const json = await res.json();
       
       if (code !== lastSelectedCodeRef.current) return;
@@ -982,7 +950,7 @@ export default function App() {
       }
       
       // 🛡️ 高价买入预警
-      if (type === 'BUY' && selStock && price > selStock.price) {
+      if (type === 'BUY' && price > selStock.price) {
           if (!confirm(`⚠️ 警告：您的买入价 ${price} 高于当前价 ${selStock.price}，将可能以较高成本成交。\n\n是否继续？`)) {
               return;
           }
@@ -1074,6 +1042,7 @@ export default function App() {
                 else if (order.type === 'SELL' && currentPrice >= order.price) {
                     executed = true;
                     newCash += order.price * order.shares;
+                    // [V12] 计算并累加已结盈亏
                     const tradePnl = (order.price - newAvgCost) * order.shares;
                     newRealizedPnl += tradePnl;
                 }
@@ -1104,7 +1073,7 @@ export default function App() {
                         ...account,
                         holding: newHolding,
                         avgCost: newAvgCost,
-                        realizedPnl: newRealizedPnl, 
+                        realizedPnl: newRealizedPnl, // 更新已结盈亏
                         trades: newTrades,
                         pending: remainingOrders
                     }
@@ -1179,20 +1148,15 @@ export default function App() {
       });
   };
 
-  // 🌟 [新增功能] 彻底重置账户 (销户重开)
   const resetAccount = () => {
       if (confirm('确定要【销户重开】吗？\n此操作将清空所有股票持仓和交易记录，资金恢复初始值。')) {
           setSimState({ cash: 1000000, initialCapital: 1000000, positions: {} });
       }
   };
 
-  // 🌟 [新增功能] 清空单只股票 (退回本金)
   const clearStock = () => {
       if (!selectedCode) return;
-      // 🛡️ 加非空保护
-      if (!selStock) return;
-      
-      if (confirm(`确定要清空【${selStock.name}】的所有记录吗？\n\n注意：这相当于“回滚”操作，该股占用的资金将按【成本价】退回账户。`)) {
+      if (confirm(`确定要清空【${selStock?.name}】的所有记录吗？\n\n注意：这相当于“回滚”操作，该股占用的资金将按【成本价】退回账户。`)) {
           setSimState(prev => {
               const currentPos = prev.positions[selectedCode];
               if (!currentPos) return prev;
@@ -1227,9 +1191,12 @@ export default function App() {
       const avgCost = pos ? pos.avgCost : 0;
       const realized = pos ? (pos.realizedPnl || 0) : 0;
       
+      // 浮动盈亏
       const marketVal = holding * selStock.price;
       const costVal = holding * avgCost;
       const floating = marketVal - costVal;
+      
+      // 总盈亏
       const total = floating + realized;
       
       return {
@@ -1259,7 +1226,7 @@ export default function App() {
     <div className="fixed inset-0 supports-[height:100dvh]:h-[100dvh] bg-[#0f1115] text-gray-300 font-sans flex flex-col overflow-hidden select-none">
       <header className="h-12 border-b border-gray-800 bg-[#161920] flex items-center justify-between px-4 z-10 shrink-0">
          <div className="flex items-center gap-2 text-emerald-400 font-bold tracking-widest">
-            <Activity size={18}/> WUKONG PRO <span className="bg-blue-600 text-white text-[9px] px-1.5 rounded">V12.5</span>
+            <Activity size={18}/> WUKONG PRO <span className="bg-blue-600 text-white text-[9px] px-1.5 rounded">V12.0</span>
          </div>
          
          <div className="flex gap-3 items-center">
@@ -1366,17 +1333,14 @@ export default function App() {
                         </div>
                         {s && <span className={`text-xs font-bold ${s.changePercent>=0?'text-red-400':'text-green-400'}`}>{s.changePercent}%</span>}
                      </div>
-                     {genieSignal && (
-                         <div className="flex justify-between items-center mb-1 text-[8px] text-gray-500 bg-gray-800/30 px-1 py-0.5 rounded">
-                             <span>{genieSignal.triggerTime}</span>
-                             <span>@{safeNum(genieSignal.triggerPrice).toFixed(2)}</span>
-                         </div>
-                     )}
                      <div className="flex justify-between text-[10px] text-gray-500">
                          <span>{c}</span>
                          {s && !isSorting && (
                              <div className="flex flex-col items-end">
                                  <span className="font-mono text-gray-300">{s.price.toFixed(2)}</span>
+                                 <div className="text-[8px] text-gray-600">
+                                     PE: {s.pe.toFixed(1)} | 换手: {s.turnover}%
+                                 </div>
                              </div>
                          )}
                      </div>
@@ -1415,7 +1379,7 @@ export default function App() {
                 <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
                    <div className="flex-[1.5] md:flex-1 md:min-h-[180px] relative border-b border-gray-800">
                       <div className="absolute top-2 left-2 z-10 flex items-center gap-1 text-[10px] text-gray-500 pointer-events-none"><TrendingUp size={10}/> 分时走势</div>
-                      {/* V12.5: 纯净图表，防白屏 */}
+                      {/* V12.0: 纯净图表 */}
                       <IntradayChart data={selStock.minuteData} prevClose={selStock.prevClose} code={selStock.code} t0Buy={report?.t0.buyPoint} t0Sell={report?.t0.sellPoint} />
                    </div>
                    <div className="flex-1 md:min-h-[150px] relative bg-[#0b0c10]">
@@ -1588,7 +1552,7 @@ export default function App() {
                              </div>
                         </div>
 
-                        {/* 3. 待成交委托 (支持撤单) - 防御渲染 */}
+                        {/* 3. 待成交委托 */}
                         <div className="space-y-2">
                             <div className="text-[10px] text-gray-500 font-bold flex items-center justify-between">
                                 <span>当前委托</span>
@@ -1614,7 +1578,7 @@ export default function App() {
                             </div>
                         </div>
 
-                        {/* 4. 成交记录 (支持删除) - 防御渲染 */}
+                        {/* 4. 成交记录 */}
                         <div className="space-y-2">
                             <div className="text-[10px] text-gray-500 font-bold">成交记录</div>
                             <div className="max-h-[150px] overflow-y-auto space-y-1 pr-1 scrollbar-thin">
