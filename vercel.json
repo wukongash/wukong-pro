@@ -1,0 +1,12 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "http://qt.gtimg.cn/$1"
+    },
+    {
+      "source": "/kline/(.*)",
+      "destination": "http://web.ifzq.gtimg.cn/$1"
+    }
+  ]
+}
