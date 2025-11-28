@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Activity, Zap, Brain, TrendingUp, BarChart2, Clock, Plus, Trash2, Shield, Search, MousePointer2, List, LineChart, Share2, Check, ArrowUp, ArrowDown, ArrowUpDown, Wand2, AlertCircle, WifiOff, Moon, Target, TrendingDown, DollarSign, Crosshair, Anchor, Wallet, Edit2, Save, User, Link as LinkIcon, Copy, Upload, Minus, Info, Lightbulb, PlayCircle, PauseCircle, RotateCcw, Calculator, Coins, XCircle, RefreshCw, CircleDollarSign, Settings } from 'lucide-react';
+import { Activity, Brain, TrendingUp, BarChart2, Clock, Plus, Trash2, Search, List, LineChart, ArrowUp, ArrowDown, ArrowUpDown, Wand2, WifiOff, Moon, Target, Wallet, Edit2, Save, User, Link as LinkIcon, Upload, Minus, Lightbulb, PlayCircle, PauseCircle, RotateCcw, Calculator, XCircle, CircleDollarSign, Settings } from 'lucide-react';
 
 // 1. 存储配置
 const CODES_KEY = 'WUKONG_CODES_V1';
 const PORTFOLIO_KEY = 'WUKONG_PORTFOLIO_V1';
-// 🛡️ [V12 升级] 数据结构升级，使用新 Key 确保数据纯净
+// 🛡️ [V12] 保持 V12 Key 不变
 const SIMULATION_KEY = 'WUKONG_SIM_V12_PRO'; 
 const DEFAULT_CODES = ['hk00700', 'sh600519', 'usNVDA', 'sz000001'];
 
@@ -38,11 +38,10 @@ interface PendingOrder {
   type: 'BUY' | 'SELL';
 }
 
-// [V12] 个股持仓结构升级：增加 accumulatedPnl (已结盈亏)
 interface SimPosition {
   holding: number;   
   avgCost: number;   
-  realizedPnl: number; // [NEW] 该股的历史累计已实现盈亏
+  realizedPnl: number; 
   trades: SimTrade[]; 
   pending: PendingOrder[]; 
 }
@@ -149,8 +148,8 @@ const QuoteItem = ({ label, val, color = "text-gray-300" }: { label: string, val
   </div>
 );
 
-// 信号强度可视化组件
-const SignalStrengthVisual = ({ stock, report }: { stock: RealStock; report: StrategyReport }) => {
+// 🛡️ 修复：移除未使用的 stock 参数，解决 Vercel 报错
+const SignalStrengthVisual = ({ report }: { report: StrategyReport }) => {
   if (!report || !report.t0) return null; 
   
   const strengthVal = safeNum(report.t0.strength, 0);
@@ -213,7 +212,7 @@ const SignalStrengthVisual = ({ stock, report }: { stock: RealStock; report: Str
   );
 };
 
-// --- IntradayChart (纯净版) ---
+// --- IntradayChart (V12.0 纯净版) ---
 const IntradayChart = React.memo(({ data = [], prevClose, code, t0Buy, t0Sell }: { data?: MinutePoint[], prevClose: number, code: string, t0Buy?: number | null, t0Sell?: number | null }) => {
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
 
@@ -556,18 +555,16 @@ export default function App() {
     } catch { return {}; }
   });
   
-  // 🛡️ [安全初始化]
+  // 🛡️ [安全初始化] 
   const [simState, setSimState] = useState<GlobalSimState>(() => {
     try {
         const stored = localStorage.getItem(SIMULATION_KEY);
         if (stored) {
             const parsed = JSON.parse(stored);
             if (typeof parsed.cash === 'number' && parsed.positions) {
-                // 深度清洗
                 Object.keys(parsed.positions).forEach(k => {
                    if (!Array.isArray(parsed.positions[k].trades)) parsed.positions[k].trades = [];
                    if (!Array.isArray(parsed.positions[k].pending)) parsed.positions[k].pending = [];
-                   // V12 新增字段初始化
                    if (typeof parsed.positions[k].realizedPnl !== 'number') parsed.positions[k].realizedPnl = 0;
                 });
                 return parsed;
@@ -583,7 +580,6 @@ export default function App() {
   const [draggedCode, setDraggedCode] = useState<string | null>(null);
   const [dragOverCode, setDragOverCode] = useState<string | null>(null);
   const [mobileTab, setMobileTab] = useState<'LIST' | 'CHART' | 'AI'>('CHART');
-  const [copied, setCopied] = useState(false);
   const [isSorting, setIsSorting] = useState(false);
   const [isGenieMode, setIsGenieMode] = useState(false);
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
@@ -602,7 +598,6 @@ export default function App() {
   const [tempCapital, setTempCapital] = useState('');
 
   const requestIdRef = useRef(0);
-  const lastSelectedCodeRef = useRef<string>('');
 
   useEffect(() => { localStorage.setItem(CODES_KEY, JSON.stringify(codes)); }, [codes]);
   useEffect(() => { localStorage.setItem(PORTFOLIO_KEY, JSON.stringify(portfolio)); }, [portfolio]);
@@ -635,8 +630,7 @@ export default function App() {
       const url = `${window.location.origin}${window.location.pathname}?sync=${encodeURIComponent(str)}`;
       setSyncLink(url);
       navigator.clipboard.writeText(url);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setTimeout(() => {}, 2000);
   };
 
   const savePortfolio = () => {
@@ -651,12 +645,6 @@ export default function App() {
           setPortfolio(next);
       }
       setIsEditingPortfolio(false);
-  };
-
-  const handleShare = () => {
-    const url = new URL(window.location.href);
-    url.searchParams.set('q', codes.join(','));
-    navigator.clipboard.writeText(url.toString()).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
   };
 
   const moveStock = (index: number, direction: 'UP' | 'DOWN') => {
@@ -693,6 +681,7 @@ export default function App() {
       const res = await fetch(`/api/q=${codes.join(',')}&_t=${Date.now()}`, { signal: controller.signal }); 
       clearTimeout(timeoutId);
       
+      // 🛡️ [核心修复]：拦截 HTML 响应，防止 JSON.parse 崩溃
       const buffer = await res.arrayBuffer();
       let text = '';
       try {
@@ -700,6 +689,8 @@ export default function App() {
       } catch (e) {
         text = new TextDecoder('utf-8').decode(buffer);
       }
+      
+      if (text.includes('<html>') || text.includes('<!DOCTYPE html>')) return;
 
       if (currentId !== requestIdRef.current) return;
 
@@ -731,6 +722,9 @@ export default function App() {
     if (code !== lastSelectedCodeRef.current) return;
     try {
       const res = await fetch(`/kline/appstock/app/minute/query?code=${code}&_t=${Date.now()}`);
+      const contentType = res.headers.get('content-type');
+      if (contentType && contentType.includes('text/html')) return;
+
       const json = await res.json();
       
       if (code !== lastSelectedCodeRef.current) return;
@@ -759,6 +753,9 @@ export default function App() {
       const isUS = code.startsWith('us');
       const params = isUS ? `${code},day,,,320` : `${code},day,,,320,qfq`;
       const res = await fetch(`/kline/appstock/app/fqkline/get?param=${params}&_t=${Date.now()}`);
+      const contentType = res.headers.get('content-type');
+      if (contentType && contentType.includes('text/html')) return;
+      
       const json = await res.json();
       
       if (code !== lastSelectedCodeRef.current) return;
@@ -950,7 +947,7 @@ export default function App() {
       }
       
       // 🛡️ 高价买入预警
-      if (type === 'BUY' && price > selStock.price) {
+      if (type === 'BUY' && selStock && price > selStock.price) {
           if (!confirm(`⚠️ 警告：您的买入价 ${price} 高于当前价 ${selStock.price}，将可能以较高成本成交。\n\n是否继续？`)) {
               return;
           }
@@ -1020,7 +1017,6 @@ export default function App() {
             let newCash = prev.cash; 
             let newHolding = account.holding;
             let newAvgCost = account.avgCost; 
-            // V12: 已结盈亏累加
             let newRealizedPnl = account.realizedPnl || 0; 
 
             const currentPrice = selStock.price;
@@ -1042,7 +1038,6 @@ export default function App() {
                 else if (order.type === 'SELL' && currentPrice >= order.price) {
                     executed = true;
                     newCash += order.price * order.shares;
-                    // [V12] 计算并累加已结盈亏
                     const tradePnl = (order.price - newAvgCost) * order.shares;
                     newRealizedPnl += tradePnl;
                 }
@@ -1057,9 +1052,9 @@ export default function App() {
                         type: order.type,
                         amount: order.price * order.shares
                     });
-                    return false; // 从 pending 中移除
+                    return false; 
                 }
-                return true; // 保留
+                return true; 
             });
 
             if (!hasChanges) return prev;
@@ -1073,7 +1068,7 @@ export default function App() {
                         ...account,
                         holding: newHolding,
                         avgCost: newAvgCost,
-                        realizedPnl: newRealizedPnl, // 更新已结盈亏
+                        realizedPnl: newRealizedPnl, 
                         trades: newTrades,
                         pending: remainingOrders
                     }
@@ -1129,7 +1124,6 @@ export default function App() {
       }
   };
 
-  // 🗑️ 删除单条交易记录
   const deleteTrade = (tradeId: string) => {
       setSimState(prev => {
           const currentPos = prev.positions[selectedCode];
@@ -1181,32 +1175,14 @@ export default function App() {
   };
 
   const currentSimPos = simState.positions[selectedCode];
-  
-  // V12: 升级后的个股盈亏计算
-  const stockPerformance = useMemo(() => {
-      if (!selStock) return null;
-      
-      const pos = simState.positions[selStock.code];
-      const holding = pos ? pos.holding : 0;
-      const avgCost = pos ? pos.avgCost : 0;
-      const realized = pos ? (pos.realizedPnl || 0) : 0;
-      
-      // 浮动盈亏
-      const marketVal = holding * selStock.price;
-      const costVal = holding * avgCost;
-      const floating = marketVal - costVal;
-      
-      // 总盈亏
-      const total = floating + realized;
-      
-      return {
-          holding,
-          avgCost,
-          floating,
-          realized,
-          total
-      };
-  }, [selStock, simState.positions]);
+  const simPnl = useMemo(() => {
+      if (!selStock || !currentSimPos || currentSimPos.holding === 0) return null;
+      const marketVal = selStock.price * currentSimPos.holding;
+      const costVal = currentSimPos.avgCost * currentSimPos.holding;
+      const val = marketVal - costVal;
+      const pct = costVal > 0 ? (val / costVal) * 100 : 0;
+      return { val, pct };
+  }, [selStock, currentSimPos]);
   
   // 全局总资产计算
   const totalAssets = useMemo(() => {
@@ -1552,7 +1528,7 @@ export default function App() {
                              </div>
                         </div>
 
-                        {/* 3. 待成交委托 */}
+                        {/* 3. 待成交委托 (支持撤单) - 防御渲染 */}
                         <div className="space-y-2">
                             <div className="text-[10px] text-gray-500 font-bold flex items-center justify-between">
                                 <span>当前委托</span>
@@ -1578,7 +1554,7 @@ export default function App() {
                             </div>
                         </div>
 
-                        {/* 4. 成交记录 */}
+                        {/* 4. 成交记录 (支持删除) - 防御渲染 */}
                         <div className="space-y-2">
                             <div className="text-[10px] text-gray-500 font-bold">成交记录</div>
                             <div className="max-h-[150px] overflow-y-auto space-y-1 pr-1 scrollbar-thin">
