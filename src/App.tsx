@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Activity, Brain, TrendingUp, BarChart2, Clock, Plus, Trash2, Search, List, LineChart, ArrowUp, ArrowDown, ArrowUpDown, Wand2, WifiOff, Moon, Target, Wallet, Edit2, Save, User, Link as LinkIcon, Upload, Minus, Lightbulb, PlayCircle, PauseCircle, RotateCcw, Calculator, XCircle, CircleDollarSign, Settings } from 'lucide-react';
+import { Activity, Brain, TrendingUp, BarChart2, Clock, Plus, Trash2, Search, List, LineChart, ArrowUp, ArrowDown, ArrowUpDown, Wand2, WifiOff, Moon, Target, Wallet, Edit2, Save, User, Link as LinkIcon, Upload, Minus, RotateCcw, Calculator, XCircle, CircleDollarSign, Settings, MousePointer2 } from 'lucide-react';
 
 // 1. 存储配置
 const CODES_KEY = 'WUKONG_CODES_V1';
 const PORTFOLIO_KEY = 'WUKONG_PORTFOLIO_V1';
-// 🛡️ [V12] 保持 V12 Key 不变
-const SIMULATION_KEY = 'WUKONG_SIM_V12_PRO'; 
+// 🛡️ [V12 核心] 
+const SIMULATION_KEY = 'WUKONG_SIM_GLOBAL_V2_FINAL'; 
 const DEFAULT_CODES = ['hk00700', 'sh600519', 'usNVDA', 'sz000001'];
 
 // --- 类型定义 ---
@@ -41,7 +41,7 @@ interface PendingOrder {
 interface SimPosition {
   holding: number;   
   avgCost: number;   
-  realizedPnl: number; 
+  realizedPnl: number;
   trades: SimTrade[]; 
   pending: PendingOrder[]; 
 }
@@ -72,6 +72,15 @@ interface StrategyReport {
     strengthLevel: 'very-weak' | 'weak' | 'moderate' | 'strong' | 'very-strong';
   };
   holding: { pnl: number; pnlPercent: number; advice: string; } | null;
+}
+
+// [V12.1] 信号结构
+interface GenieSignal {
+    type: 'RISING' | 'HOT' | 'PANIC';
+    label: string;
+    color: string;
+    triggerTime: string; 
+    triggerPrice: number; 
 }
 
 // 🛡️ 工具：数值安全检查
@@ -131,12 +140,22 @@ const TechIndicators = {
 
 // 🌟 精灵信号判定引擎
 const GenieEngine = {
-  analyze: (s: RealStock) => {
+  analyze: (s: RealStock): GenieSignal | null => {
     const isUS = s.code.startsWith('us');
     const turnoverLimit = isUS ? 0.5 : 2;
-    if (s.changePercent > 2 && s.turnover > turnoverLimit) return { type: 'RISING', label: '🚀拉升', color: 'text-purple-400 bg-purple-900/20 border-purple-800' };
-    if (s.changePercent > 0 && s.turnover > (turnoverLimit * 2.5)) return { type: 'HOT', label: '🔥抢筹', color: 'text-orange-400 bg-orange-900/20 border-orange-800' };
-    if (s.changePercent < -3 && s.turnover > (turnoverLimit * 1.5)) return { type: 'PANIC', label: '💀出逃', color: 'text-blue-400 bg-blue-900/20 border-blue-800' };
+    
+    const now = new Date();
+    const timeStr = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
+
+    if (s.changePercent > 2 && s.turnover > turnoverLimit) {
+        return { type: 'RISING', label: '🚀 拉升', color: 'text-purple-400 bg-purple-900/20 border-purple-800', triggerTime: timeStr, triggerPrice: s.price };
+    }
+    if (s.changePercent > 0 && s.turnover > (turnoverLimit * 2.5)) {
+        return { type: 'HOT', label: '🔥 抢筹', color: 'text-orange-400 bg-orange-900/20 border-orange-800', triggerTime: timeStr, triggerPrice: s.price };
+    }
+    if (s.changePercent < -3 && s.turnover > (turnoverLimit * 1.5)) {
+        return { type: 'PANIC', label: '💀 出逃', color: 'text-blue-400 bg-blue-900/20 border-blue-800', triggerTime: timeStr, triggerPrice: s.price };
+    }
     return null;
   }
 };
@@ -148,7 +167,7 @@ const QuoteItem = ({ label, val, color = "text-gray-300" }: { label: string, val
   </div>
 );
 
-// 🛡️ 修复：移除未使用的 stock 参数，解决 Vercel 报错
+// 🛡️ [FIX] 修复 Props 类型，移除未使用的 stock
 const SignalStrengthVisual = ({ report }: { report: StrategyReport }) => {
   if (!report || !report.t0) return null; 
   
@@ -212,7 +231,7 @@ const SignalStrengthVisual = ({ report }: { report: StrategyReport }) => {
   );
 };
 
-// --- IntradayChart (V12.0 纯净版) ---
+// --- IntradayChart (纯净版) ---
 const IntradayChart = React.memo(({ data = [], prevClose, code, t0Buy, t0Sell }: { data?: MinutePoint[], prevClose: number, code: string, t0Buy?: number | null, t0Sell?: number | null }) => {
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
 
@@ -562,9 +581,11 @@ export default function App() {
         if (stored) {
             const parsed = JSON.parse(stored);
             if (typeof parsed.cash === 'number' && parsed.positions) {
+                // 深度清洗
                 Object.keys(parsed.positions).forEach(k => {
                    if (!Array.isArray(parsed.positions[k].trades)) parsed.positions[k].trades = [];
                    if (!Array.isArray(parsed.positions[k].pending)) parsed.positions[k].pending = [];
+                   // V12 字段初始化
                    if (typeof parsed.positions[k].realizedPnl !== 'number') parsed.positions[k].realizedPnl = 0;
                 });
                 return parsed;
@@ -580,6 +601,7 @@ export default function App() {
   const [draggedCode, setDraggedCode] = useState<string | null>(null);
   const [dragOverCode, setDragOverCode] = useState<string | null>(null);
   const [mobileTab, setMobileTab] = useState<'LIST' | 'CHART' | 'AI'>('CHART');
+  const [copied, setCopied] = useState(false);
   const [isSorting, setIsSorting] = useState(false);
   const [isGenieMode, setIsGenieMode] = useState(false);
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
@@ -598,9 +620,13 @@ export default function App() {
   const [tempCapital, setTempCapital] = useState('');
 
   const requestIdRef = useRef(0);
+  // 🛡️ [V12.4 修复] 补回丢失的 Ref 定义
+  const lastSelectedCodeRef = useRef<string>('');
+  const lastSignalRef = useRef<Record<string, string>>({});
 
   useEffect(() => { localStorage.setItem(CODES_KEY, JSON.stringify(codes)); }, [codes]);
   useEffect(() => { localStorage.setItem(PORTFOLIO_KEY, JSON.stringify(portfolio)); }, [portfolio]);
+  // 🛡️ [安全存储]
   useEffect(() => { localStorage.setItem(SIMULATION_KEY, JSON.stringify(simState)); }, [simState]);
   
   useEffect(() => { if (!selectedCode && codes.length > 0) setSelectedCode(codes[0]); }, [codes, selectedCode]);
@@ -624,13 +650,30 @@ export default function App() {
       }
   }, [selectedCode]);
 
+  // 🔊 信号触发逻辑
+  useEffect(() => {
+      stocks.forEach(s => {
+          const signal = GenieEngine.analyze(s);
+          const lastType = lastSignalRef.current[s.code];
+          
+          if (signal) {
+              if (signal.type !== lastType) {
+                  lastSignalRef.current[s.code] = signal.type;
+              }
+          } else {
+              if (lastType) delete lastSignalRef.current[s.code];
+          }
+      });
+  }, [stocks]); 
+
   const generateSyncLink = () => {
       const data = { codes, portfolio };
       const str = btoa(JSON.stringify(data));
       const url = `${window.location.origin}${window.location.pathname}?sync=${encodeURIComponent(str)}`;
       setSyncLink(url);
       navigator.clipboard.writeText(url);
-      setTimeout(() => {}, 2000);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
   };
 
   const savePortfolio = () => {
@@ -647,10 +690,16 @@ export default function App() {
       setIsEditingPortfolio(false);
   };
 
+  const handleShare = () => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('q', codes.join(','));
+    navigator.clipboard.writeText(url.toString()).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
+  };
+
   const moveStock = (index: number, direction: 'UP' | 'DOWN') => {
     const newCodes = [...codes];
     if (direction === 'UP' && index > 0) { [newCodes[index], newCodes[index - 1]] = [newCodes[index - 1], newCodes[index]]; } 
-    else if (direction === 'DOWN' && index < newCodes.length - 1) { [newCodes[index], newCodes[index + 1]] = [newCodes[index + 1]] = [newCodes[index + 1], newCodes[index]]; }
+    else if (direction === 'DOWN' && index < newCodes.length - 1) { [newCodes[index], newCodes[index + 1]] = [newCodes[index + 1], newCodes[index]]; }
     setCodes(newCodes);
   };
 
@@ -946,7 +995,7 @@ export default function App() {
           return;
       }
       
-      // 🛡️ 高价买入预警
+      // 🛡️ 高价买入预警 (加非空断言)
       if (type === 'BUY' && selStock && price > selStock.price) {
           if (!confirm(`⚠️ 警告：您的买入价 ${price} 高于当前价 ${selStock.price}，将可能以较高成本成交。\n\n是否继续？`)) {
               return;
@@ -1017,6 +1066,7 @@ export default function App() {
             let newCash = prev.cash; 
             let newHolding = account.holding;
             let newAvgCost = account.avgCost; 
+            // V12: 已结盈亏累加
             let newRealizedPnl = account.realizedPnl || 0; 
 
             const currentPrice = selStock.price;
@@ -1052,9 +1102,9 @@ export default function App() {
                         type: order.type,
                         amount: order.price * order.shares
                     });
-                    return false; 
+                    return false; // 从 pending 中移除
                 }
-                return true; 
+                return true; // 保留
             });
 
             if (!hasChanges) return prev;
@@ -1124,6 +1174,7 @@ export default function App() {
       }
   };
 
+  // 🗑️ 删除单条交易记录
   const deleteTrade = (tradeId: string) => {
       setSimState(prev => {
           const currentPos = prev.positions[selectedCode];
@@ -1142,15 +1193,20 @@ export default function App() {
       });
   };
 
+  // 🌟 [新增功能] 彻底重置账户 (销户重开)
   const resetAccount = () => {
       if (confirm('确定要【销户重开】吗？\n此操作将清空所有股票持仓和交易记录，资金恢复初始值。')) {
           setSimState({ cash: 1000000, initialCapital: 1000000, positions: {} });
       }
   };
 
+  // 🌟 [新增功能] 清空单只股票 (退回本金)
   const clearStock = () => {
       if (!selectedCode) return;
-      if (confirm(`确定要清空【${selStock?.name}】的所有记录吗？\n\n注意：这相当于“回滚”操作，该股占用的资金将按【成本价】退回账户。`)) {
+      // 🛡️ 加非空保护
+      if (!selStock) return;
+      
+      if (confirm(`确定要清空【${selStock.name}】的所有记录吗？\n\n注意：这相当于“回滚”操作，该股占用的资金将按【成本价】退回账户。`)) {
           setSimState(prev => {
               const currentPos = prev.positions[selectedCode];
               if (!currentPos) return prev;
@@ -1184,12 +1240,36 @@ export default function App() {
       return { val, pct };
   }, [selStock, currentSimPos]);
   
+  // 🛡️ [修复] 补回 stockPerformance 逻辑，解决模拟面板显示问题
+  const stockPerformance = useMemo(() => {
+      if (!selStock) return null;
+      
+      const pos = simState.positions[selStock.code];
+      const holding = pos ? pos.holding : 0;
+      const avgCost = pos ? pos.avgCost : 0;
+      const realized = pos ? (pos.realizedPnl || 0) : 0;
+      
+      const marketVal = holding * selStock.price;
+      const costVal = holding * avgCost;
+      const floating = marketVal - costVal;
+      const total = floating + realized;
+      
+      return {
+          holding,
+          avgCost,
+          floating,
+          realized,
+          total
+      };
+  }, [selStock, simState.positions]);
+  
   // 全局总资产计算
   const totalAssets = useMemo(() => {
       let totalMarketValue = 0;
       Object.keys(simState.positions).forEach(code => {
           const pos = simState.positions[code];
           const stock = stocks.find(s => s.code === code);
+          // 🛡️ 价格防御
           const currentPrice = stock ? stock.price : pos.avgCost; 
           totalMarketValue += pos.holding * currentPrice;
       });
@@ -1202,7 +1282,7 @@ export default function App() {
     <div className="fixed inset-0 supports-[height:100dvh]:h-[100dvh] bg-[#0f1115] text-gray-300 font-sans flex flex-col overflow-hidden select-none">
       <header className="h-12 border-b border-gray-800 bg-[#161920] flex items-center justify-between px-4 z-10 shrink-0">
          <div className="flex items-center gap-2 text-emerald-400 font-bold tracking-widest">
-            <Activity size={18}/> WUKONG PRO <span className="bg-blue-600 text-white text-[9px] px-1.5 rounded">V12.0</span>
+            <Activity size={18}/> WUKONG PRO <span className="bg-blue-600 text-white text-[9px] px-1.5 rounded">V12.4</span>
          </div>
          
          <div className="flex gap-3 items-center">
@@ -1292,6 +1372,7 @@ export default function App() {
                {codes.map((c, index) => {
                  const s = stocks.find(item => item.code === c);
                  const genieSignal = s ? GenieEngine.analyze(s) : null;
+                 // [V12.1] 列表渲染信号
                  if (isGenieMode && !genieSignal) return null;
 
                  return (
@@ -1305,18 +1386,27 @@ export default function App() {
                      <div className="flex justify-between items-center mb-1">
                         <div className="flex items-center gap-1 overflow-hidden">
                            <span className="font-bold text-gray-200 text-xs truncate max-w-[4.5rem]">{s ? s.name : c}</span>
-                           {genieSignal && <span className={`text-[9px] px-1 rounded border shrink-0 ${genieSignal.color}`}>{genieSignal.label}</span>}
+                           {/* [V12.1] 信号标签 */}
+                           {genieSignal && (
+                               <div className="flex flex-col ml-1">
+                                   <span className={`text-[9px] px-1 rounded border shrink-0 ${genieSignal.color}`}>{genieSignal.label}</span>
+                               </div>
+                           )}
                         </div>
                         {s && <span className={`text-xs font-bold ${s.changePercent>=0?'text-red-400':'text-green-400'}`}>{s.changePercent}%</span>}
                      </div>
+                     {/* [V12.2] 安全的时空标记 */}
+                     {genieSignal && (
+                         <div className="flex justify-between items-center mb-1 text-[8px] text-gray-500 bg-gray-800/30 px-1 py-0.5 rounded">
+                             <span>{genieSignal.triggerTime}</span>
+                             <span>@{safeNum(genieSignal.triggerPrice).toFixed(2)}</span>
+                         </div>
+                     )}
                      <div className="flex justify-between text-[10px] text-gray-500">
                          <span>{c}</span>
                          {s && !isSorting && (
                              <div className="flex flex-col items-end">
                                  <span className="font-mono text-gray-300">{s.price.toFixed(2)}</span>
-                                 <div className="text-[8px] text-gray-600">
-                                     PE: {s.pe.toFixed(1)} | 换手: {s.turnover}%
-                                 </div>
                              </div>
                          )}
                      </div>
@@ -1355,7 +1445,7 @@ export default function App() {
                 <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
                    <div className="flex-[1.5] md:flex-1 md:min-h-[180px] relative border-b border-gray-800">
                       <div className="absolute top-2 left-2 z-10 flex items-center gap-1 text-[10px] text-gray-500 pointer-events-none"><TrendingUp size={10}/> 分时走势</div>
-                      {/* V12.0: 纯净图表 */}
+                      {/* V12.2: 纯净图表 */}
                       <IntradayChart data={selStock.minuteData} prevClose={selStock.prevClose} code={selStock.code} t0Buy={report?.t0.buyPoint} t0Sell={report?.t0.sellPoint} />
                    </div>
                    <div className="flex-1 md:min-h-[150px] relative bg-[#0b0c10]">
@@ -1451,7 +1541,7 @@ export default function App() {
                                     <div className="text-sm font-mono text-green-400 font-bold">{report.t0.sellPoint ? report.t0.sellPoint.toFixed(2) : '--'}</div>
                                 </div>
                             </div>
-                            <SignalStrengthVisual stock={selStock} report={report} />
+                            <SignalStrengthVisual report={report} />
                         </div>
                         <div className="p-3 rounded border border-blue-900/30 bg-blue-900/10">
                             <div className="text-[10px] text-blue-400 mb-1 font-bold">策略逻辑</div>
