@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Activity, Zap, Brain, TrendingUp, BarChart2, Clock, Plus, Trash2, Shield, Search, MousePointer2, List, LineChart, Share2, Check, ArrowUp, ArrowDown, ArrowUpDown, Wand2, AlertCircle, WifiOff, Moon, Target, TrendingDown, DollarSign, Crosshair, Anchor, Wallet, Edit2, Save, User, Link as LinkIcon, Copy, Upload, Minus, Info, Lightbulb, PlayCircle, PauseCircle, RotateCcw, Calculator, Coins, XCircle, RefreshCw, CircleDollarSign, Settings } from 'lucide-react';
+import { Activity, Brain, TrendingUp, BarChart2, Clock, Plus, Trash2, Search, List, LineChart, ArrowUp, ArrowDown, ArrowUpDown, Wand2, WifiOff, Moon, Target, Wallet, Edit2, Save, User, Link as LinkIcon, Upload, Minus, RotateCcw, Calculator, XCircle, CircleDollarSign, Settings } from 'lucide-react';
 
 // 1. 存储配置
 const CODES_KEY = 'WUKONG_CODES_V1';
 const PORTFOLIO_KEY = 'WUKONG_PORTFOLIO_V1';
-// 🛡️ [V12 升级] 数据结构升级，使用新 Key 确保数据纯净
+// 🛡️ [V12] 保持 V12 Key 不变
 const SIMULATION_KEY = 'WUKONG_SIM_V12_PRO'; 
 const DEFAULT_CODES = ['hk00700', 'sh600519', 'usNVDA', 'sz000001'];
 
@@ -38,11 +38,10 @@ interface PendingOrder {
   type: 'BUY' | 'SELL';
 }
 
-// [V12] 个股持仓结构升级：增加 accumulatedPnl (已结盈亏)
 interface SimPosition {
   holding: number;   
   avgCost: number;   
-  realizedPnl: number; // [NEW] 该股的历史累计已实现盈亏
+  realizedPnl: number; 
   trades: SimTrade[]; 
   pending: PendingOrder[]; 
 }
@@ -149,8 +148,8 @@ const QuoteItem = ({ label, val, color = "text-gray-300" }: { label: string, val
   </div>
 );
 
-// 信号强度可视化组件
-const SignalStrengthVisual = ({ stock, report }: { stock: RealStock; report: StrategyReport }) => {
+// 🛡️ 修复：移除了未使用的 stock 参数，解决 TS2322 报错
+const SignalStrengthVisual = ({ report }: { report: StrategyReport }) => {
   if (!report || !report.t0) return null; 
   
   const strengthVal = safeNum(report.t0.strength, 0);
@@ -213,7 +212,7 @@ const SignalStrengthVisual = ({ stock, report }: { stock: RealStock; report: Str
   );
 };
 
-// --- IntradayChart (纯净版) ---
+// --- IntradayChart ---
 const IntradayChart = React.memo(({ data = [], prevClose, code, t0Buy, t0Sell }: { data?: MinutePoint[], prevClose: number, code: string, t0Buy?: number | null, t0Sell?: number | null }) => {
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
 
@@ -556,7 +555,7 @@ export default function App() {
     } catch { return {}; }
   });
   
-  // 🛡️ [安全初始化]
+  // 🛡️ [安全初始化] 模拟交易状态 (全新 V2 结构)
   const [simState, setSimState] = useState<GlobalSimState>(() => {
     try {
         const stored = localStorage.getItem(SIMULATION_KEY);
@@ -583,7 +582,6 @@ export default function App() {
   const [draggedCode, setDraggedCode] = useState<string | null>(null);
   const [dragOverCode, setDragOverCode] = useState<string | null>(null);
   const [mobileTab, setMobileTab] = useState<'LIST' | 'CHART' | 'AI'>('CHART');
-  const [copied, setCopied] = useState(false);
   const [isSorting, setIsSorting] = useState(false);
   const [isGenieMode, setIsGenieMode] = useState(false);
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
@@ -635,8 +633,7 @@ export default function App() {
       const url = `${window.location.origin}${window.location.pathname}?sync=${encodeURIComponent(str)}`;
       setSyncLink(url);
       navigator.clipboard.writeText(url);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setTimeout(() => {}, 2000);
   };
 
   const savePortfolio = () => {
@@ -651,12 +648,6 @@ export default function App() {
           setPortfolio(next);
       }
       setIsEditingPortfolio(false);
-  };
-
-  const handleShare = () => {
-    const url = new URL(window.location.href);
-    url.searchParams.set('q', codes.join(','));
-    navigator.clipboard.writeText(url.toString()).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
   };
 
   const moveStock = (index: number, direction: 'UP' | 'DOWN') => {
@@ -950,7 +941,7 @@ export default function App() {
       }
       
       // 🛡️ 高价买入预警
-      if (type === 'BUY' && price > selStock.price) {
+      if (type === 'BUY' && selStock && price > selStock.price) {
           if (!confirm(`⚠️ 警告：您的买入价 ${price} 高于当前价 ${selStock.price}，将可能以较高成本成交。\n\n是否继续？`)) {
               return;
           }
@@ -1042,7 +1033,6 @@ export default function App() {
                 else if (order.type === 'SELL' && currentPrice >= order.price) {
                     executed = true;
                     newCash += order.price * order.shares;
-                    // [V12] 计算并累加已结盈亏
                     const tradePnl = (order.price - newAvgCost) * order.shares;
                     newRealizedPnl += tradePnl;
                 }
@@ -1073,7 +1063,7 @@ export default function App() {
                         ...account,
                         holding: newHolding,
                         avgCost: newAvgCost,
-                        realizedPnl: newRealizedPnl, // 更新已结盈亏
+                        realizedPnl: newRealizedPnl, 
                         trades: newTrades,
                         pending: remainingOrders
                     }
@@ -1148,15 +1138,20 @@ export default function App() {
       });
   };
 
+  // 🌟 [新增功能] 彻底重置账户 (销户重开)
   const resetAccount = () => {
       if (confirm('确定要【销户重开】吗？\n此操作将清空所有股票持仓和交易记录，资金恢复初始值。')) {
           setSimState({ cash: 1000000, initialCapital: 1000000, positions: {} });
       }
   };
 
+  // 🌟 [新增功能] 清空单只股票 (退回本金)
   const clearStock = () => {
       if (!selectedCode) return;
-      if (confirm(`确定要清空【${selStock?.name}】的所有记录吗？\n\n注意：这相当于“回滚”操作，该股占用的资金将按【成本价】退回账户。`)) {
+      // 🛡️ 加非空保护
+      if (!selStock) return;
+      
+      if (confirm(`确定要清空【${selStock.name}】的所有记录吗？\n\n注意：这相当于“回滚”操作，该股占用的资金将按【成本价】退回账户。`)) {
           setSimState(prev => {
               const currentPos = prev.positions[selectedCode];
               if (!currentPos) return prev;
@@ -1181,8 +1176,16 @@ export default function App() {
   };
 
   const currentSimPos = simState.positions[selectedCode];
+  const simPnl = useMemo(() => {
+      if (!selStock || !currentSimPos || currentSimPos.holding === 0) return null;
+      const marketVal = selStock.price * currentSimPos.holding;
+      const costVal = currentSimPos.avgCost * currentSimPos.holding;
+      const val = marketVal - costVal;
+      const pct = costVal > 0 ? (val / costVal) * 100 : 0;
+      return { val, pct };
+  }, [selStock, currentSimPos]);
   
-  // V12: 升级后的个股盈亏计算
+  // 🛡️ [修复] 补回 stockPerformance 逻辑，解决模拟面板显示问题
   const stockPerformance = useMemo(() => {
       if (!selStock) return null;
       
@@ -1191,12 +1194,9 @@ export default function App() {
       const avgCost = pos ? pos.avgCost : 0;
       const realized = pos ? (pos.realizedPnl || 0) : 0;
       
-      // 浮动盈亏
       const marketVal = holding * selStock.price;
       const costVal = holding * avgCost;
       const floating = marketVal - costVal;
-      
-      // 总盈亏
       const total = floating + realized;
       
       return {
@@ -1214,6 +1214,7 @@ export default function App() {
       Object.keys(simState.positions).forEach(code => {
           const pos = simState.positions[code];
           const stock = stocks.find(s => s.code === code);
+          // 🛡️ 价格防御
           const currentPrice = stock ? stock.price : pos.avgCost; 
           totalMarketValue += pos.holding * currentPrice;
       });
@@ -1226,7 +1227,7 @@ export default function App() {
     <div className="fixed inset-0 supports-[height:100dvh]:h-[100dvh] bg-[#0f1115] text-gray-300 font-sans flex flex-col overflow-hidden select-none">
       <header className="h-12 border-b border-gray-800 bg-[#161920] flex items-center justify-between px-4 z-10 shrink-0">
          <div className="flex items-center gap-2 text-emerald-400 font-bold tracking-widest">
-            <Activity size={18}/> WUKONG PRO <span className="bg-blue-600 text-white text-[9px] px-1.5 rounded">V12.0</span>
+            <Activity size={18}/> WUKONG PRO <span className="bg-blue-600 text-white text-[9px] px-1.5 rounded">V12.0.1</span>
          </div>
          
          <div className="flex gap-3 items-center">
@@ -1475,7 +1476,7 @@ export default function App() {
                                     <div className="text-sm font-mono text-green-400 font-bold">{report.t0.sellPoint ? report.t0.sellPoint.toFixed(2) : '--'}</div>
                                 </div>
                             </div>
-                            <SignalStrengthVisual stock={selStock} report={report} />
+                            <SignalStrengthVisual report={report} />
                         </div>
                         <div className="p-3 rounded border border-blue-900/30 bg-blue-900/10">
                             <div className="text-[10px] text-blue-400 mb-1 font-bold">策略逻辑</div>
@@ -1552,7 +1553,7 @@ export default function App() {
                              </div>
                         </div>
 
-                        {/* 3. 待成交委托 */}
+                        {/* 3. 待成交委托 (支持撤单) - 防御渲染 */}
                         <div className="space-y-2">
                             <div className="text-[10px] text-gray-500 font-bold flex items-center justify-between">
                                 <span>当前委托</span>
@@ -1578,7 +1579,7 @@ export default function App() {
                             </div>
                         </div>
 
-                        {/* 4. 成交记录 */}
+                        {/* 4. 成交记录 (支持删除) - 防御渲染 */}
                         <div className="space-y-2">
                             <div className="text-[10px] text-gray-500 font-bold">成交记录</div>
                             <div className="max-h-[150px] overflow-y-auto space-y-1 pr-1 scrollbar-thin">
