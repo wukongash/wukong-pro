@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Activity, Zap, Brain, TrendingUp, BarChart2, Clock, Plus, Trash2, Shield, Search, MousePointer2, List, LineChart, Share2, Check, ArrowUp, ArrowDown, ArrowUpDown, Wand2, AlertCircle, WifiOff, Moon, Target, TrendingDown, DollarSign, Crosshair, Anchor, Wallet, Edit2, Save, User, Link as LinkIcon, Copy, Upload, Minus, Info, Lightbulb, PlayCircle, PauseCircle, RotateCcw, Calculator, Coins, XCircle, RefreshCw, CircleDollarSign, Settings, Radar, ShieldAlert, Lock, Siren, Microscope, Filter, BookOpen, X } from 'lucide-react';
+import { Activity, Zap, Brain, TrendingUp, BarChart2, Clock, Plus, Trash2, Shield, Search, MousePointer2, List, LineChart, Share2, Check, ArrowUp, ArrowDown, ArrowUpDown, Wand2, AlertCircle, WifiOff, Moon, Target, TrendingDown, DollarSign, Crosshair, Anchor, Wallet, Edit2, Save, User, Link as LinkIcon, Copy, Upload, Minus, Info, Lightbulb, PlayCircle, PauseCircle, RotateCcw, Calculator, Coins, XCircle, RefreshCw, CircleDollarSign, Settings, Radar, ShieldAlert, Lock, Siren, Microscope, Filter } from 'lucide-react';
 
 // 1. 存储配置
 const CODES_KEY = 'WUKONG_CODES_V1';
@@ -51,6 +51,7 @@ interface GlobalSimState {
   positions: Record<string, SimPosition>; 
 }
 
+// [V12.3] 策略报告结构升级
 interface StrategyReport {
   t0: { 
     action: string; 
@@ -70,13 +71,14 @@ interface StrategyReport {
     strength: number;
     strengthLevel: 'very-weak' | 'weak' | 'moderate' | 'strong' | 'very-strong';
     isAccumulating: boolean; 
-    stopLossPrice: number | null;
-    isBroken: boolean;
-    breakStatus: 'SAFE' | 'VALID_BREAK' | 'SUSPECT_TRAP'; 
+    // ATR & RSI 协同字段
+    stopLossPrice: number | null; 
+    breakStatus: 'SAFE' | 'VALID_BREAK' | 'SUSPECT_TRAP'; // 新增状态枚举
   };
   holding: { pnl: number; pnlPercent: number; advice: string; } | null;
 }
 
+// 🛡️ 工具：数值安全检查
 const safeNum = (val: any, fallback = 0) => {
     return (typeof val === 'number' && isFinite(val) && !isNaN(val)) ? val : fallback;
 };
@@ -142,6 +144,7 @@ const TechIndicators = {
     const isVolIncreasing = avgVolPrev > 0 && avgVolRecent > (avgVolPrev * 1.3);
     return isSideways && isVolIncreasing;
   },
+  // 🦅 [V12.2] ATR 吊灯止损算法 (Safety Rope)
   calculateChandelierExit: (data: KLinePoint[], period: number = 22, multiplier: number = 3.0) => {
     if (!data || data.length < period) return [];
     const trs: number[] = [];
@@ -173,6 +176,7 @@ const TechIndicators = {
   }
 };
 
+// 🌟 精灵信号判定引擎
 const GenieEngine = {
   analyze: (s: RealStock) => {
     const isUS = s.code.startsWith('us');
@@ -193,105 +197,7 @@ const QuoteItem = ({ label, val, color = "text-gray-300" }: { label: string, val
   </div>
 );
 
-// --- 实战手册组件 [V12.4 新增] ---
-const TacticalManual = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) => {
-    if (!isOpen) return null;
-    return (
-        <div className="absolute inset-0 z-50 bg-black/90 flex items-center justify-center p-4" onClick={onClose}>
-            <div className="bg-[#12141a] border border-gray-700 w-full max-w-2xl h-[80vh] flex flex-col rounded-xl shadow-2xl overflow-hidden" onClick={e=>e.stopPropagation()}>
-                <div className="p-4 border-b border-gray-800 flex justify-between items-center bg-[#161920]">
-                    <div className="flex items-center gap-2">
-                        <BookOpen size={18} className="text-blue-400"/>
-                        <span className="font-bold text-gray-200">实战作战手册 (Operation Manual)</span>
-                    </div>
-                    <button onClick={onClose} className="text-gray-500 hover:text-white"><X size={18}/></button>
-                </div>
-                <div className="flex-1 overflow-y-auto p-6 space-y-8 scrollbar-thin text-gray-300 text-sm leading-relaxed">
-                    
-                    {/* Chapter 1 */}
-                    <section>
-                        <h3 className="text-purple-400 font-bold mb-3 flex items-center gap-2 text-lg"><Shield size={18}/> 第一章：夜视仪系统 (Night Vision)</h3>
-                        <div className="bg-purple-900/10 border border-purple-900/30 p-4 rounded-lg space-y-4">
-                            <div>
-                                <strong className="text-purple-300">1. 🟣 紫色虚线：VWAP (机构成本线)</strong>
-                                <ul className="list-disc pl-5 mt-1 text-gray-400 space-y-1">
-                                    <li><strong>定义：</strong> 当日进场机构的平均持仓成本。</li>
-                                    <li><strong>作战心法：</strong> 
-                                        <br/>股价 {'>'} VWAP：<strong>强势区</strong>，只做多。
-                                        <br/>股价 {'<'} VWAP：<strong>弱势区</strong>，只做空或观望。
-                                    </li>
-                                </ul>
-                            </div>
-                            <div>
-                                <strong className="text-yellow-500">2. 🟨 金色量柱：主力大单 (Whale Alert)</strong>
-                                <ul className="list-disc pl-5 mt-1 text-gray-400 space-y-1">
-                                    <li><strong>低位金柱 + 股价滞涨：</strong> 悄悄吸货（建仓）。</li>
-                                    <li><strong>高位金柱 + 股价跳水：</strong> 暴力出货（快跑）。</li>
-                                    <li><strong>拉升金柱 + 突破压力：</strong> 冲锋号角（跟随）。</li>
-                                </ul>
-                            </div>
-                        </div>
-                    </section>
-
-                    {/* Chapter 2 */}
-                    <section>
-                        <h3 className="text-emerald-400 font-bold mb-3 flex items-center gap-2 text-lg"><Radar size={18}/> 第二章：雷达系统 (The Radar)</h3>
-                        <div className="bg-emerald-900/10 border border-emerald-900/30 p-4 rounded-lg space-y-4">
-                            <div>
-                                <strong className="text-emerald-400">1. 🧲 “吸筹”标签 (Accumulation)</strong>
-                                <p className="text-gray-400 mt-1">如果你看到列表里某只股票带上了 🧲，说明有人在“压着价格买”。</p>
-                                <p className="text-gray-300 font-bold mt-1">🚨 操作指令：不要立刻买入！加入自选，等待一根大阳线突破时果断跟进。</p>
-                            </div>
-                            <div>
-                                <strong className="text-blue-400">2. 短线精灵 (Genie)</strong>
-                                <div className="grid grid-cols-3 gap-2 mt-2 text-xs text-center">
-                                    <div className="bg-purple-900/30 p-1 rounded border border-purple-800 text-purple-300">🚀 拉升 (打板/追涨)</div>
-                                    <div className="bg-orange-900/30 p-1 rounded border border-orange-800 text-orange-300">🔥 抢筹 (最佳上车)</div>
-                                    <div className="bg-blue-900/30 p-1 rounded border border-blue-800 text-blue-300">💀 出逃 (止损)</div>
-                                </div>
-                            </div>
-                        </div>
-                    </section>
-
-                    {/* Chapter 3 */}
-                    <section>
-                        <h3 className="text-orange-400 font-bold mb-3 flex items-center gap-2 text-lg"><Lock size={18}/> 第三章：安全绳系统 (Safety Rope)</h3>
-                        <div className="bg-orange-900/10 border border-orange-900/30 p-4 rounded-lg space-y-4">
-                            <div>
-                                <strong className="text-orange-400">1. 🟠 橙色虚线：ATR 吊灯止损</strong>
-                                <p className="text-gray-400 mt-1">这根线挂在近期最高价下方。股价涨它跟着涨；股价跌它不动。这是你的<strong>保命底线</strong>。</p>
-                            </div>
-                            <div>
-                                <strong>2. 三色防御状态 (策略面板)</strong>
-                                <ul className="list-none pl-0 mt-2 space-y-2">
-                                    <li className="flex gap-2">
-                                        <span className="text-orange-400 font-bold whitespace-nowrap">🛡️ 安全状态:</span>
-                                        <span className="text-gray-400">股价在橙线之上。<strong>安心持股</strong>。</span>
-                                    </li>
-                                    <li className="flex gap-2">
-                                        <span className="text-red-400 font-bold whitespace-nowrap">🚨 确认破位:</span>
-                                        <span className="text-gray-400">跌破安全绳 且 RSI{'>'}35。趋势反转，<strong>无脑离场</strong>。</span>
-                                    </li>
-                                    <li className="flex gap-2">
-                                        <span className="text-yellow-400 font-bold whitespace-nowrap">📉 疑似诱空:</span>
-                                        <span className="text-gray-400">跌破但 RSI{'<'}35 (超卖)。可能是假摔。<strong>观察成交量，收盘不回则卖。</strong></span>
-                                    </li>
-                                </ul>
-                            </div>
-                        </div>
-                    </section>
-
-                    <div className="p-4 bg-gray-800 rounded border border-gray-600 text-center">
-                        <h4 className="text-white font-bold mb-2">⭐️ 终极交易心法</h4>
-                        <p className="text-gray-400 text-xs">Wukong Pro 不是为了预测未来，而是为了修正你的这一秒。</p>
-                    </div>
-
-                </div>
-            </div>
-        </div>
-    );
-};
-
+// 信号强度可视化组件
 const SignalStrengthVisual = ({ stock, report }: { stock: RealStock; report: StrategyReport }) => {
   if (!report || !report.t0) return null; 
   
@@ -355,6 +261,7 @@ const SignalStrengthVisual = ({ stock, report }: { stock: RealStock; report: Str
   );
 };
 
+// --- IntradayChart ---
 const IntradayChart = React.memo(({ data = [], prevClose, code, t0Buy, t0Sell }: { data?: MinutePoint[], prevClose: number, code: string, t0Buy?: number | null, t0Sell?: number | null }) => {
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
 
@@ -484,7 +391,9 @@ const IntradayChart = React.memo(({ data = [], prevClose, code, t0Buy, t0Sell }:
                </linearGradient>
              </defs>
              <line x1="0" y1={50} x2="100" y2={50} stroke="#4b5563" strokeWidth="0.5" strokeDasharray="3 3" vectorEffect="non-scaling-stroke" opacity="0.5" />
+             {/* VWAP Line */}
              <line x1="0" y1={vwapY} x2="100" y2={vwapY} stroke="#8b5cf6" strokeWidth="1" strokeDasharray="4 2" vectorEffect="non-scaling-stroke" opacity="0.7" />
+             {/* T0 Buy/Sell Lines */}
              {t0Buy && t0Buy > bottom && t0Buy < top && <line x1="0" y1={100 - ((t0Buy - bottom) / range) * 100} x2="100" y2={100 - ((t0Buy - bottom) / range) * 100} stroke="#10b981" strokeWidth="1" strokeDasharray="2 3" vectorEffect="non-scaling-stroke" opacity="0.6" />}
              {t0Sell && t0Sell > bottom && t0Sell < top && <line x1="0" y1={100 - ((t0Sell - bottom) / range) * 100} x2="100" y2={100 - ((t0Sell - bottom) / range) * 100} stroke="#ef4444" strokeWidth="1" strokeDasharray="2 3" vectorEffect="non-scaling-stroke" opacity="0.6" />}
              
@@ -504,8 +413,10 @@ const IntradayChart = React.memo(({ data = [], prevClose, code, t0Buy, t0Sell }:
              {validData.map((d, i) => {
                const safeIndex = Math.min(i, MAX_POINTS - 1);
                const prevP = i > 0 ? validData[i-1].p : effectivePrev;
+               
                const isHugeVol = d.v > volStats.threshold && d.v > 0;
                const barColor = isHugeVol ? '#f59e0b' : (d.p > prevP ? '#ef4444' : d.p < prevP ? '#22c55e' : '#6b7280');
+               
                const barHeight = (d.v / volStats.maxVol) * 100;
                const x = (safeIndex / (MAX_POINTS - 1)) * 100;
                const w = (100 / MAX_POINTS) * 0.6; 
@@ -517,6 +428,7 @@ const IntradayChart = React.memo(({ data = [], prevClose, code, t0Buy, t0Sell }:
   );
 });
 
+// --- CandleChart (升级版) ---
 const CandleChart = React.memo(({ data = [], subChartMode, setSubChartMode }: { data?: KLinePoint[], subChartMode: 'VOL' | 'MACD' | 'RSI', setSubChartMode: any }) => {
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
 
@@ -644,7 +556,9 @@ const CandleChart = React.memo(({ data = [], subChartMode, setSubChartMode }: { 
              <polyline points={getLinePoints(displayMA5, renderMin, renderRange)} fill="none" stroke="#facc15" strokeWidth="1" vectorEffect="non-scaling-stroke" />
              <polyline points={getLinePoints(displayMA10, renderMin, renderRange)} fill="none" stroke="#22d3ee" strokeWidth="1" vectorEffect="non-scaling-stroke" />
              <polyline points={getLinePoints(displayMA20, renderMin, renderRange)} fill="none" stroke="#a855f7" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+             {/* 🦅 安全绳 */}
              <polyline points={getLinePoints(displaySafeRope, renderMin, renderRange)} fill="none" stroke="#fbbf24" strokeWidth="1.5" strokeDasharray="4 2" vectorEffect="non-scaling-stroke" />
+
              {hoverIdx !== null && <line x1={(hoverIdx * barWidth) + barWidth/2} y1="0" x2={(hoverIdx * barWidth) + barWidth/2} y2="145" stroke="#60a5fa" strokeWidth="1" strokeDasharray="2 2" vectorEffect="non-scaling-stroke" />}
            </svg>
        </div>
@@ -676,6 +590,7 @@ const CandleChart = React.memo(({ data = [], subChartMode, setSubChartMode }: { 
              </svg>
           ) : (
              <svg className="w-full h-full overflow-hidden" viewBox="0 0 100 100" preserveAspectRatio="none">
+                 {/* RSI 20/80 参考线 */}
                  <line x1="0" y1="80" x2="100" y2="80" stroke="#dc2626" strokeWidth="1" strokeDasharray="3 3" opacity="0.5"/>
                  <line x1="0" y1="20" x2="100" y2="20" stroke="#22c55e" strokeWidth="1" strokeDasharray="3 3" opacity="0.5"/>
                  <polyline points={getLinePoints(displayRSI, 0, 100, false)} fill="none" stroke="#8b5cf6" strokeWidth="1" vectorEffect="non-scaling-stroke" />
@@ -686,6 +601,7 @@ const CandleChart = React.memo(({ data = [], subChartMode, setSubChartMode }: { 
   );
 });
 
+// --- App ---
 export default function App() {
   const [codes, setCodes] = useState<string[]>(() => {
     try {
@@ -715,15 +631,18 @@ export default function App() {
     } catch { return {}; }
   });
   
+  // 🛡️ [安全初始化]
   const [simState, setSimState] = useState<GlobalSimState>(() => {
     try {
         const stored = localStorage.getItem(SIMULATION_KEY);
         if (stored) {
             const parsed = JSON.parse(stored);
             if (typeof parsed.cash === 'number' && parsed.positions) {
+                // 深度清洗
                 Object.keys(parsed.positions).forEach(k => {
                    if (!Array.isArray(parsed.positions[k].trades)) parsed.positions[k].trades = [];
                    if (!Array.isArray(parsed.positions[k].pending)) parsed.positions[k].pending = [];
+                   // V12 新增字段初始化
                    if (typeof parsed.positions[k].realizedPnl !== 'number') parsed.positions[k].realizedPnl = 0;
                 });
                 return parsed;
@@ -745,17 +664,17 @@ export default function App() {
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
   const [syncLink, setSyncLink] = useState('');
   const [isEditingPortfolio, setIsEditingPortfolio] = useState(false);
+  
   const [strategyTab, setStrategyTab] = useState<'T0' | 'TREND' | 'SIM'>('T0');
+  
   const [tempCost, setTempCost] = useState('');
   const [tempShares, setTempShares] = useState('');
   const [subChartMode, setSubChartMode] = useState<'VOL'|'MACD'|'RSI'>('MACD');
+  
   const [simVol, setSimVol] = useState('100'); 
   const [simPrice, setSimPrice] = useState(''); 
   const [isSettingCapital, setIsSettingCapital] = useState(false); 
   const [tempCapital, setTempCapital] = useState('');
-  
-  // [V12.4] 新增：是否打开说明书
-  const [isManualOpen, setIsManualOpen] = useState(false);
 
   const requestIdRef = useRef(0);
   const lastSelectedCodeRef = useRef<string>('');
@@ -779,6 +698,7 @@ export default function App() {
           setTempCost(p ? p.cost.toString() : '');
           setTempShares(p ? p.shares.toString() : '');
           setIsEditingPortfolio(false);
+          
           const s = stocks.find(x => x.code === selectedCode);
           if (s) setSimPrice(s.price.toFixed(2));
       }
@@ -808,6 +728,12 @@ export default function App() {
       setIsEditingPortfolio(false);
   };
 
+  const handleShare = () => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('q', codes.join(','));
+    navigator.clipboard.writeText(url.toString()).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
+  };
+
   const moveStock = (index: number, direction: 'UP' | 'DOWN') => {
     const newCodes = [...codes];
     if (direction === 'UP' && index > 0) { [newCodes[index], newCodes[index - 1]] = [newCodes[index - 1], newCodes[index]]; } 
@@ -833,16 +759,25 @@ export default function App() {
 
   const fetchRealData = useCallback(async () => {
     if (codes.length === 0) return;
+    
     const currentId = ++requestIdRef.current;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
+
     try {
       const res = await fetch(`/api/q=${codes.join(',')}&_t=${Date.now()}`, { signal: controller.signal }); 
       clearTimeout(timeoutId);
+      
       const buffer = await res.arrayBuffer();
       let text = '';
-      try { text = new TextDecoder('gbk').decode(buffer); } catch (e) { text = new TextDecoder('utf-8').decode(buffer); }
+      try {
+        text = new TextDecoder('gbk').decode(buffer);
+      } catch (e) {
+        text = new TextDecoder('utf-8').decode(buffer);
+      }
+
       if (currentId !== requestIdRef.current) return;
+
       setStocks(prev => text.split(';').filter(l => l.trim()).map(line => {
          const parts = line.split('~');
          if (parts.length < 10) return null;
@@ -862,7 +797,9 @@ export default function App() {
            minuteData: old?.minuteData || [], klineData: old?.klineData || []
          };
       }).filter(Boolean) as RealStock[]);
-    } catch (e) { if ((e as Error).name !== 'AbortError') console.error("API Error", e); }
+    } catch (e) { 
+        if ((e as Error).name !== 'AbortError') console.error("API Error", e); 
+    }
   }, [codes]);
 
   const fetchMinute = async (code: string) => {
@@ -870,7 +807,9 @@ export default function App() {
     try {
       const res = await fetch(`/kline/appstock/app/minute/query?code=${code}&_t=${Date.now()}`);
       const json = await res.json();
+      
       if (code !== lastSelectedCodeRef.current) return;
+
       const arr = json?.data?.[code]?.data?.data;
       if (Array.isArray(arr)) {
         const minutePoints: MinutePoint[] = [];
@@ -896,7 +835,9 @@ export default function App() {
       const params = isUS ? `${code},day,,,320` : `${code},day,,,320,qfq`;
       const res = await fetch(`/kline/appstock/app/fqkline/get?param=${params}&_t=${Date.now()}`);
       const json = await res.json();
+      
       if (code !== lastSelectedCodeRef.current) return;
+
       const arr = json?.data?.[code]?.qfqday || json?.data?.[code]?.day;
       if (Array.isArray(arr)) {
         const kdata = arr.map((i: any[]) => ({ date: i[0], open: parseFloat(i[1]), close: parseFloat(i[2]), high: parseFloat(i[3]), low: parseFloat(i[4]), vol: parseFloat(i[5]) }));
@@ -930,38 +871,57 @@ export default function App() {
       let t0Buy = null;
       let t0Sell = null;
       let t0Desc = "日内波动较小，建议静观其变。";
+      
       let vwap = s.price;
       if (minute.length > 0) {
           const sumP = minute.reduce((acc, cur) => acc + cur.p, 0);
           vwap = sumP / minute.length;
       }
+      
       const amplitude = s.open > 0 ? (s.high - s.low) / s.open : 0.02;
       const dynamicBand = Math.max(0.015, amplitude * 0.6);
+
       const dayUp = vwap * (1 + dynamicBand);
       const dayDn = vwap * (1 - dynamicBand);
+
       const dist = Math.abs(s.price - vwap);
       const maxDist = vwap * dynamicBand * 1.5;
       let rawStrength = Math.min(100, (dist / maxDist) * 100);
+      
       let liquidityScore = Math.min(100, (s.turnover / 3) * 60 + (s.amount / 100000000) * 10); 
       if (liquidityScore < 20) liquidityScore = 20;
+
       let rsi = 50;
-      if (kdata.length > 6) { rsi = TechIndicators.calculateRSI(kdata); }
+      if (kdata.length > 6) {
+         rsi = TechIndicators.calculateRSI(kdata);
+      }
+      
       let confidence = 50;
 
       if (s.price < dayDn) {
-          t0Action = "机会"; t0Buy = s.price; t0Desc = "股价日内超跌，乖离率过大，存在反抽均线需求，激进者可现价博反弹。";
-          if (rsi < 30) confidence += 30; else if (rsi < 45) confidence += 10;
+          t0Action = "机会";
+          t0Buy = s.price;
+          t0Desc = "股价日内超跌，乖离率过大，存在反抽均线需求，激进者可现价博反弹。";
+          if (rsi < 30) confidence += 30;
+          else if (rsi < 45) confidence += 10;
           confidence += (rawStrength * 0.3);
       } else if (s.price > dayUp) {
-          t0Action = "风险"; t0Sell = s.price; t0Desc = "股价日内超涨，偏离均线过远，谨防冲高回落，建议分批止盈。";
-          if (rsi > 70) confidence += 30; else if (rsi > 55) confidence += 10;
+          t0Action = "风险";
+          t0Sell = s.price;
+          t0Desc = "股价日内超涨，偏离均线过远，谨防冲高回落，建议分批止盈。";
+          if (rsi > 70) confidence += 30;
+          else if (rsi > 55) confidence += 10;
           confidence += (rawStrength * 0.3);
       } else {
-          t0Buy = dayDn; t0Sell = dayUp;
-          if (s.price > vwap) t0Desc = "股价运行于均线上方，属于强势震荡，持股待涨。"; else t0Desc = "股价受制于均线压制，弱势震荡，多看少动。";
+          t0Buy = dayDn;
+          t0Sell = dayUp;
+          if (s.price > vwap) t0Desc = "股价运行于均线上方，属于强势震荡，持股待涨。";
+          else t0Desc = "股价受制于均线压制，弱势震荡，多看少动。";
+          
           rawStrength = Math.max(10, rawStrength);
           confidence = 40 + (liquidityScore * 0.2);
       }
+
       confidence = Math.min(100, confidence);
 
       let t0StrengthLevel: 'very-weak' | 'weak' | 'moderate' | 'strong' | 'very-strong' = 'moderate';
@@ -971,20 +931,35 @@ export default function App() {
       else if (rawStrength < 80) t0StrengthLevel = 'strong';
       else t0StrengthLevel = 'very-strong';
 
-      let trendPos = "中位"; let trendDir = "震荡"; let trendAdvice = "暂无明确方向。";
+      let trendPos = "中位";
+      let trendDir = "震荡";
+      let trendAdvice = "暂无明确方向。";
       let trendStrength = 0;
       let trendStrengthLevel: 'very-weak' | 'weak' | 'moderate' | 'strong' | 'very-strong' = 'moderate';
+      
+      // 🦅 [V12.1] 吸筹信号
       const isAccumulating = TechIndicators.checkAccumulation(kdata);
+      
+      // 🦅 [V12.3] 智能 ATR+RSI 协同过滤系统
       let stopLossPrice = null;
       let breakStatus: 'SAFE' | 'VALID_BREAK' | 'SUSPECT_TRAP' = 'SAFE';
       
       if (kdata.length > 22) {
           const exits = TechIndicators.calculateChandelierExit(kdata, 22, 3.0);
           const currentExit = exits[exits.length - 1]; 
+          
           if (currentExit !== null) {
               stopLossPrice = currentExit;
+              
               if (s.price < currentExit) {
-                  if (rsi < 35) { breakStatus = 'SUSPECT_TRAP'; } else { breakStatus = 'VALID_BREAK'; }
+                  // 🚨 破位！现在检查滤网 (RSI)
+                  if (rsi < 35) {
+                      // RSI 处于超卖区，可能是假摔 (主力的恐慌盘清洗)
+                      breakStatus = 'SUSPECT_TRAP';
+                  } else {
+                      // RSI 并未超卖，或仍在 35 以上，确认趋势反转
+                      breakStatus = 'VALID_BREAK';
+                  }
               }
           }
       }
@@ -992,14 +967,25 @@ export default function App() {
       if (kdata.length >= 20) {
           const pos = TechIndicators.calculatePosition(kdata, 20);
           const ma20 = TechIndicators.calculateMA(kdata, 20).pop() || 0;
-          if (pos < 20) trendPos = "低位"; else if (pos > 80) trendPos = "高位";
-          if (s.price > ma20) trendDir = "多头"; else trendDir = "空头";
+
+          if (pos < 20) trendPos = "低位";
+          else if (pos > 80) trendPos = "高位";
+
+          if (s.price > ma20) trendDir = "多头";
+          else trendDir = "空头";
+
           let trendDev = Math.abs((s.price - ma20) / ma20) * 100;
           trendStrength = Math.min(100, trendDev * 10 + (pos > 80 || pos < 20 ? 30 : 0));
-          if (trendPos === "低位") { trendAdvice = "股价处于近20日低位区域，下跌空间有限。即使趋势偏弱，也不宜盲目割肉，耐心等待底部企稳信号。"; } 
-          else if (trendPos === "高位" && trendDir === "空头") { trendAdvice = "高位出现破位迹象，头部风险加剧，建议坚决离场规避风险。"; } 
-          else if (trendDir === "多头") { trendAdvice = "趋势维持良好，沿5日线/20日线持股，享受趋势红利。"; } 
-          else { trendAdvice = "目前处于中位震荡区间，缺乏方向感，建议关注箱体突破方向。"; }
+
+          if (trendPos === "低位") {
+              trendAdvice = "股价处于近20日低位区域，下跌空间有限。即使趋势偏弱，也不宜盲目割肉，耐心等待底部企稳信号。";
+          } else if (trendPos === "高位" && trendDir === "空头") {
+              trendAdvice = "高位出现破位迹象，头部风险加剧，建议坚决离场规避风险。";
+          } else if (trendDir === "多头") {
+              trendAdvice = "趋势维持良好，沿5日线/20日线持股，享受趋势红利。";
+          } else {
+              trendAdvice = "目前处于中位震荡区间，缺乏方向感，建议关注箱体突破方向。";
+          }
       }
 
       if (trendStrength < 20) trendStrengthLevel = 'very-weak';
@@ -1010,68 +996,194 @@ export default function App() {
 
       let holdingInfo = null;
       if (myPos) {
-          const marketVal = s.price * myPos.shares; const costVal = myPos.cost * myPos.shares; const pnl = marketVal - costVal; const pnlPercent = costVal > 0 ? (pnl / costVal) * 100 : 0;
+          const marketVal = s.price * myPos.shares;
+          const costVal = myPos.cost * myPos.shares;
+          const pnl = marketVal - costVal;
+          const pnlPercent = costVal > 0 ? (pnl / costVal) * 100 : 0;
+          
           let hAdvice = "";
           if (pnlPercent > 5) hAdvice = "持仓盈利良好，可设置止盈保护线。";
           else if (pnlPercent < -5) {
               if (trendPos === "低位") hAdvice = "深套勿慌，股价已至低位，可尝试日内T+0降低成本。";
               else hAdvice = "亏损扩大，注意控制仓位，反抽均线可考虑减仓。";
           } else hAdvice = "成本附近震荡，耐心持有。";
+
           holdingInfo = { pnl, pnlPercent, advice: hAdvice };
       }
 
       return {
-          t0: { action: t0Action, buyPoint: t0Buy, sellPoint: t0Sell, desc: t0Desc, strength: rawStrength, strengthLevel: t0StrengthLevel, confidence: confidence, executionScore: liquidityScore },
-          trend: { position: trendPos, trend: trendDir, advice: trendAdvice, rsi, strength: trendStrength, strengthLevel: trendStrengthLevel, isAccumulating, stopLossPrice, breakStatus },
+          t0: { 
+            action: t0Action, 
+            buyPoint: t0Buy, 
+            sellPoint: t0Sell, 
+            desc: t0Desc, 
+            strength: rawStrength,
+            strengthLevel: t0StrengthLevel,
+            confidence: confidence,
+            executionScore: liquidityScore
+          },
+          trend: { 
+            position: trendPos, 
+            trend: trendDir, 
+            advice: trendAdvice, 
+            rsi,
+            strength: trendStrength,
+            strengthLevel: trendStrengthLevel,
+            isAccumulating,
+            stopLossPrice,
+            breakStatus
+          },
           holding: holdingInfo
       };
+
     } catch (e) { return null; }
   }, [selStock, portfolio]);
 
   const fmt = (n: number) => n > 100000000 ? (n/100000000).toFixed(2)+'亿' : (n/10000).toFixed(2)+'万';
 
+  // 🕹️ 核心逻辑：提交委托 (挂单)
   const handleTradeAction = (type: 'BUY' | 'SELL', e?: React.MouseEvent) => {
       if (e) { e.preventDefault(); e.stopPropagation(); } 
+      
       if (!selectedCode) return;
       const price = parseFloat(simPrice);
       const vol = parseInt(simVol);
-      if (isNaN(price) || price <= 0 || isNaN(vol) || vol <= 0) { alert('请输入有效的价格和数量'); return; }
-      if (type === 'BUY' && price > selStock.price) { if (!confirm(`⚠️ 警告：您的买入价 ${price} 高于当前价 ${selStock.price}，将可能以较高成本成交。\n\n是否继续？`)) return; }
+      
+      if (isNaN(price) || price <= 0 || isNaN(vol) || vol <= 0) {
+          alert('请输入有效的价格和数量');
+          return;
+      }
+      
+      // 🛡️ 高价买入预警
+      if (type === 'BUY' && price > selStock.price) {
+          if (!confirm(`⚠️ 警告：您的买入价 ${price} 高于当前价 ${selStock.price}，将可能以较高成本成交。\n\n是否继续？`)) {
+              return;
+          }
+      }
+      
       const now = new Date();
       const timeStr = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
+      
       setSimState(prev => {
           const account = prev.positions[selectedCode] || { holding: 0, avgCost: 0, realizedPnl: 0, trades: [], pending: [] };
           const currentPending = Array.isArray(account.pending) ? account.pending : [];
-          let newCash = prev.cash; let newHolding = account.holding; 
-          const newOrder: PendingOrder = { id: Date.now().toString(), time: timeStr, price: price, shares: vol, type: type };
-          if (type === 'BUY') { const needed = price * vol; if (newCash < needed) { alert(`资金不足！需要 ${needed.toFixed(2)}，可用 ${newCash.toFixed(2)}`); return prev; } newCash -= needed; } 
-          else { if (newHolding < vol) { alert(`持仓不足！当前 ${newHolding}，尝试卖出 ${vol}`); return prev; } newHolding -= vol; }
-          return { ...prev, cash: newCash, positions: { ...prev.positions, [selectedCode]: { ...account, holding: newHolding, pending: [...currentPending, newOrder] } } };
+          
+          let newCash = prev.cash;
+          let newHolding = account.holding; 
+          
+          const newOrder: PendingOrder = {
+              id: Date.now().toString(),
+              time: timeStr,
+              price: price,
+              shares: vol,
+              type: type
+          };
+
+          // 预扣除逻辑 (冻结)
+          if (type === 'BUY') {
+              const needed = price * vol;
+              if (newCash < needed) {
+                  alert(`资金不足！需要 ${needed.toFixed(2)}，可用 ${newCash.toFixed(2)}`);
+                  return prev;
+              }
+              newCash -= needed;
+          } else {
+              if (newHolding < vol) {
+                  alert(`持仓不足！当前 ${newHolding}，尝试卖出 ${vol}`);
+                  return prev;
+              }
+              newHolding -= vol; 
+          }
+
+          return {
+              ...prev,
+              cash: newCash,
+              positions: {
+                  ...prev.positions,
+                  [selectedCode]: {
+                      ...account,
+                      holding: newHolding, 
+                      pending: [...currentPending, newOrder]
+                  }
+              }
+          };
       });
   };
 
+  // 🤖 撮合引擎：实时监控股价，触发成交
   useEffect(() => {
       if (!selStock) return;
+      
       try {
         setSimState(prev => {
             const account = prev.positions[selStock.code];
             if (!account || !Array.isArray(account.pending) || account.pending.length === 0) return prev;
+
             let hasChanges = false;
             let newPending = [...account.pending];
             let newTrades = Array.isArray(account.trades) ? [...account.trades] : [];
-            let newCash = prev.cash; let newHolding = account.holding; let newAvgCost = account.avgCost; let newRealizedPnl = account.realizedPnl || 0; 
+            let newCash = prev.cash; 
+            let newHolding = account.holding;
+            let newAvgCost = account.avgCost; 
+            // V12: 已结盈亏累加
+            let newRealizedPnl = account.realizedPnl || 0; 
+
             const currentPrice = selStock.price;
             const now = new Date();
             const timeStr = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
+
+            // 遍历检查所有委托单
             const remainingOrders = newPending.filter(order => {
                 let executed = false;
-                if (order.type === 'BUY' && currentPrice <= order.price) { executed = true; const costBasis = (newHolding * newAvgCost) + (order.price * order.shares); newHolding += order.shares; newAvgCost = newHolding > 0 ? costBasis / newHolding : 0; } 
-                else if (order.type === 'SELL' && currentPrice >= order.price) { executed = true; newCash += order.price * order.shares; const tradePnl = (order.price - newAvgCost) * order.shares; newRealizedPnl += tradePnl; }
-                if (executed) { hasChanges = true; newTrades.push({ id: order.id + '_exec', time: timeStr, price: order.price, shares: order.shares, type: order.type, amount: order.price * order.shares }); return false; }
-                return true;
+                
+                // 买入规则
+                if (order.type === 'BUY' && currentPrice <= order.price) {
+                    executed = true;
+                    const costBasis = (newHolding * newAvgCost) + (order.price * order.shares);
+                    newHolding += order.shares;
+                    newAvgCost = newHolding > 0 ? costBasis / newHolding : 0;
+                } 
+                // 卖出规则
+                else if (order.type === 'SELL' && currentPrice >= order.price) {
+                    executed = true;
+                    newCash += order.price * order.shares;
+                    // [V12] 计算并累加已结盈亏
+                    const tradePnl = (order.price - newAvgCost) * order.shares;
+                    newRealizedPnl += tradePnl;
+                }
+
+                if (executed) {
+                    hasChanges = true;
+                    newTrades.push({
+                        id: order.id + '_exec',
+                        time: timeStr,
+                        price: order.price, 
+                        shares: order.shares,
+                        type: order.type,
+                        amount: order.price * order.shares
+                    });
+                    return false; // 从 pending 中移除
+                }
+                return true; // 保留
             });
+
             if (!hasChanges) return prev;
-            return { ...prev, cash: newCash, positions: { ...prev.positions, [selStock.code]: { ...account, holding: newHolding, avgCost: newAvgCost, realizedPnl: newRealizedPnl, trades: newTrades, pending: remainingOrders } } };
+
+            return {
+                ...prev,
+                cash: newCash,
+                positions: {
+                    ...prev.positions,
+                    [selStock.code]: {
+                        ...account,
+                        holding: newHolding,
+                        avgCost: newAvgCost,
+                        realizedPnl: newRealizedPnl, // 更新已结盈亏
+                        trades: newTrades,
+                        pending: remainingOrders
+                    }
+                }
+            };
         });
       } catch(e) { console.error("Matching Engine Error", e); }
   }, [selStock]); 
@@ -1079,59 +1191,135 @@ export default function App() {
   const cancelOrder = (orderId: string) => {
       if (!selectedCode) return;
       setSimState(prev => {
-          const account = prev.positions[selectedCode]; if (!account) return prev;
+          const account = prev.positions[selectedCode];
+          if (!account) return prev;
+          
           const pendingList = Array.isArray(account.pending) ? account.pending : [];
-          const orderToCancel = pendingList.find(o => o.id === orderId); if (!orderToCancel) return prev;
-          let newCash = prev.cash; let newHolding = account.holding;
-          if (orderToCancel.type === 'BUY') { newCash += orderToCancel.price * orderToCancel.shares; } else { newHolding += orderToCancel.shares; }
-          return { ...prev, cash: newCash, positions: { ...prev.positions, [selectedCode]: { ...account, holding: newHolding, pending: pendingList.filter(o => o.id !== orderId) } } };
+          const orderToCancel = pendingList.find(o => o.id === orderId);
+          if (!orderToCancel) return prev;
+
+          let newCash = prev.cash;
+          let newHolding = account.holding;
+
+          if (orderToCancel.type === 'BUY') {
+              newCash += orderToCancel.price * orderToCancel.shares;
+          } else {
+              newHolding += orderToCancel.shares;
+          }
+
+          return {
+              ...prev,
+              cash: newCash,
+              positions: {
+                  ...prev.positions,
+                  [selectedCode]: {
+                      ...account,
+                      holding: newHolding,
+                      pending: pendingList.filter(o => o.id !== orderId)
+                  }
+              }
+          };
       });
   };
 
   const updateCapital = () => {
       const newCap = parseFloat(tempCapital);
       if (!isNaN(newCap) && newCap > 0) {
-          setSimState(prev => ({ ...prev, initialCapital: newCap, cash: newCap }));
+          setSimState(prev => ({
+              ...prev,
+              initialCapital: newCap,
+              cash: newCap 
+          }));
           setIsSettingCapital(false);
       }
   };
 
+  // 🗑️ 删除单条交易记录
   const deleteTrade = (tradeId: string) => {
       setSimState(prev => {
-          const currentPos = prev.positions[selectedCode]; if (!currentPos || !Array.isArray(currentPos.trades)) return prev;
-          return { ...prev, positions: { ...prev.positions, [selectedCode]: { ...currentPos, trades: currentPos.trades.filter(t => t.id !== tradeId) } } };
+          const currentPos = prev.positions[selectedCode];
+          if (!currentPos || !Array.isArray(currentPos.trades)) return prev;
+          
+          return {
+              ...prev,
+              positions: {
+                  ...prev.positions,
+                  [selectedCode]: {
+                      ...currentPos,
+                      trades: currentPos.trades.filter(t => t.id !== tradeId)
+                  }
+              }
+          };
       });
   };
 
-  const resetAccount = () => { if (confirm('确定要【销户重开】吗？\n此操作将清空所有股票持仓和交易记录，资金恢复初始值。')) { setSimState({ cash: 1000000, initialCapital: 1000000, positions: {} }); } };
+  const resetAccount = () => {
+      if (confirm('确定要【销户重开】吗？\n此操作将清空所有股票持仓和交易记录，资金恢复初始值。')) {
+          setSimState({ cash: 1000000, initialCapital: 1000000, positions: {} });
+      }
+  };
 
   const clearStock = () => {
       if (!selectedCode) return;
       if (confirm(`确定要清空【${selStock?.name}】的所有记录吗？\n\n注意：这相当于“回滚”操作，该股占用的资金将按【成本价】退回账户。`)) {
           setSimState(prev => {
-              const currentPos = prev.positions[selectedCode]; if (!currentPos) return prev;
+              const currentPos = prev.positions[selectedCode];
+              if (!currentPos) return prev;
+              
               let refund = currentPos.holding * currentPos.avgCost;
-              if (currentPos.pending) { currentPos.pending.forEach(o => { if (o.type === 'BUY') refund += o.price * o.shares; }); }
-              const nextPositions = { ...prev.positions }; delete nextPositions[selectedCode];
-              return { ...prev, cash: prev.cash + refund, positions: nextPositions };
+              if (currentPos.pending) {
+                  currentPos.pending.forEach(o => {
+                      if (o.type === 'BUY') refund += o.price * o.shares;
+                  });
+              }
+
+              const nextPositions = { ...prev.positions };
+              delete nextPositions[selectedCode];
+              
+              return {
+                  ...prev,
+                  cash: prev.cash + refund,
+                  positions: nextPositions
+              };
           });
       }
   };
 
   const currentSimPos = simState.positions[selectedCode];
   
+  // V12: 升级后的个股盈亏计算
   const stockPerformance = useMemo(() => {
       if (!selStock) return null;
+      
       const pos = simState.positions[selStock.code];
-      const holding = pos ? pos.holding : 0; const avgCost = pos ? pos.avgCost : 0; const realized = pos ? (pos.realizedPnl || 0) : 0;
-      const marketVal = holding * selStock.price; const costVal = holding * avgCost; const floating = marketVal - costVal; const total = floating + realized;
-      return { holding, avgCost, floating, realized, total };
+      const holding = pos ? pos.holding : 0;
+      const avgCost = pos ? pos.avgCost : 0;
+      const realized = pos ? (pos.realizedPnl || 0) : 0;
+      
+      // 浮动盈亏
+      const marketVal = holding * selStock.price;
+      const costVal = holding * avgCost;
+      const floating = marketVal - costVal;
+      
+      // 总盈亏
+      const total = floating + realized;
+      
+      return {
+          holding,
+          avgCost,
+          floating,
+          realized,
+          total
+      };
   }, [selStock, simState.positions]);
   
+  // 全局总资产计算
   const totalAssets = useMemo(() => {
       let totalMarketValue = 0;
       Object.keys(simState.positions).forEach(code => {
-          const pos = simState.positions[code]; const stock = stocks.find(s => s.code === code); const currentPrice = stock ? stock.price : pos.avgCost; 
+          const pos = simState.positions[code];
+          const stock = stocks.find(s => s.code === code);
+          const currentPrice = stock ? stock.price : pos.avgCost; 
           totalMarketValue += pos.holding * currentPrice;
       });
       return simState.cash + totalMarketValue;
@@ -1143,7 +1331,7 @@ export default function App() {
     <div className="fixed inset-0 supports-[height:100dvh]:h-[100dvh] bg-[#0f1115] text-gray-300 font-sans flex flex-col overflow-hidden select-none">
       <header className="h-12 border-b border-gray-800 bg-[#161920] flex items-center justify-between px-4 z-10 shrink-0">
          <div className="flex items-center gap-2 text-emerald-400 font-bold tracking-widest">
-            <Activity size={18}/> WUKONG PRO <span className="bg-blue-600 text-white text-[9px] px-1.5 rounded">V12.4</span>
+            <Activity size={18}/> WUKONG PRO <span className="bg-blue-600 text-white text-[9px] px-1.5 rounded">V12.3</span>
          </div>
          
          <div className="flex gap-3 items-center">
@@ -1155,11 +1343,6 @@ export default function App() {
                     {totalAssets.toFixed(0)} <span className="text-[8px] bg-gray-800 px-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">设置</span>
                 </div>
             </div>
-
-            {/* 12.4 说明书按钮 */}
-            <button onClick={() => setIsManualOpen(true)} className="text-gray-400 hover:text-white flex items-center gap-1 ml-2 transition-colors">
-                <BookOpen size={16}/>
-            </button>
 
             <button onClick={() => setIsSyncModalOpen(true)} className="text-gray-400 hover:text-white flex items-center gap-1 ml-2">
                 <User size={16}/>
@@ -1208,9 +1391,6 @@ export default function App() {
               </div>
           </div>
       )}
-
-      {/* V12.4 实战手册弹窗 */}
-      <TacticalManual isOpen={isManualOpen} onClose={() => setIsManualOpen(false)} />
 
       <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative pb-[calc(50px+env(safe-area-inset-bottom))] md:pb-0">
          
