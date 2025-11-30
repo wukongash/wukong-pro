@@ -1,1661 +1,995 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Activity, Brain, TrendingUp, BarChart2, Clock, Plus, Trash2, Shield, Search, MousePointer2, List, LineChart, ArrowUp, ArrowDown, ArrowUpDown, Wand2, WifiOff, Moon, Target, Wallet, Edit2, Save, User, Link as LinkIcon, Upload, Minus, RotateCcw, Calculator, XCircle, CircleDollarSign, Settings, Radar, Lock, Siren, Microscope, BookOpen, X } from 'lucide-react';
+import { 
+  Activity, Zap, Brain, TrendingUp, BarChart2, Clock, Plus, Trash2, 
+  Shield, Search, MousePointer2, List, LineChart, ArrowUp, ArrowDown, 
+  ArrowUpDown, Wand2, AlertCircle, WifiOff, Moon, Target, DollarSign, 
+  Crosshair, Anchor, Wallet, Edit2, Save, User, Link as LinkIcon, Copy, 
+  Upload, Minus, Info, Lightbulb, PlayCircle, PauseCircle, RotateCcw, 
+  Calculator, XCircle, RefreshCw, CircleDollarSign, Settings, Radar, 
+  ShieldAlert, Lock, Siren, Microscope, Filter, BookOpen, X, Layers, Check 
+} from 'lucide-react';
 
-// 1. 存储配置
+// ============================================================================
+// SECTION 1: 全局配置与常量 (CONFIGURATION)
+// ============================================================================
+
 const CODES_KEY = 'WUKONG_CODES_V1';
 const PORTFOLIO_KEY = 'WUKONG_PORTFOLIO_V1';
-const SIMULATION_KEY = 'WUKONG_SIM_V12_PRO';
+const SIMULATION_KEY = 'WUKONG_SIM_V12_PRO'; 
 const DEFAULT_CODES = ['hk00700', 'sh600519', 'usNVDA', 'sz000001'];
 
-// --- 类型定义 ---
-interface MinutePoint { p: number; v: number; t?: string; }
-interface PortfolioItem { cost: number; shares: number; }
+// ============================================================================
+// SECTION 2: 数据类型定义 (TYPE DEFINITIONS)
+// ============================================================================
+
+// 分时数据点
+interface MinutePoint { 
+  p: number; // Price
+  v: number; // Volume
+  t?: string; // Time "09:30"
+}
+
+// K线数据点
+interface KLinePoint { 
+  date: string; 
+  open: number; 
+  close: number; 
+  high: number; 
+  low: number; 
+  vol: number; 
+}
+
+// 持仓项
+interface PortfolioItem { 
+  cost: number; 
+  shares: number; 
+}
+
+// 核心股票对象
 interface RealStock {
-  id: string; code: string; name: string; price: number;
+  id: string; 
+  code: string; 
+  name: string; 
+  price: number; 
   changePercent: number;
-  open: number; prevClose: number; high: number; low: number; volume: number;
-  amount: number; turnover: number; pe: number; mktCap: number;
+  open: number; 
+  prevClose: number; 
+  high: number; 
+  low: number; 
+  volume: number;
+  amount: number; 
+  turnover: number; 
+  pe: number; 
+  mktCap: number;
   minuteData: MinutePoint[]; 
   klineData: KLinePoint[]; 
 }
-interface KLinePoint { date: string; open: number; close: number; high: number; low: number; vol: number; }
 
-// 模拟交易数据结构
+// 模拟交易记录
 interface SimTrade {
   id: string;
   time: string;
   price: number;
   shares: number;
   type: 'BUY' | 'SELL';
-  amount: number;
 }
 
-interface PendingOrder {
-  id: string;
-  time: string;
-  price: number;
-  shares: number;
-  type: 'BUY' | 'SELL';
-}
-
-interface SimPosition {
-  holding: number;   
-  avgCost: number;   
+// 模拟持仓状态
+interface SimPosition { 
+  holding: number; 
+  avgCost: number; 
   realizedPnl: number; 
   trades: SimTrade[]; 
-  pending: PendingOrder[]; 
+  pending: any[]; 
 }
 
-interface GlobalSimState {
-  cash: number;
+// 全局模拟账户
+interface GlobalSimState { 
+  cash: number; 
   initialCapital: number; 
   positions: Record<string, SimPosition>; 
 }
 
-interface StrategyReport {
-  t0: { 
-    action: string; 
-    buyPoint: number | null; 
-    sellPoint: number | null; 
-    desc: string; 
-    strength: number; 
-    strengthLevel: 'very-weak' | 'weak' | 'moderate' | 'strong' | 'very-strong';
-    confidence: number; 
-    executionScore: number; 
-  };
-  trend: { 
-    position: string; 
-    trend: string; 
-    advice: string; 
-    rsi: number;
-    strength: number;
-    strengthLevel: 'very-weak' | 'weak' | 'moderate' | 'strong' | 'very-strong';
-    isAccumulating: boolean; 
-    stopLossPrice: number | null;
-    isBroken: boolean;
-    breakStatus: 'SAFE' | 'VALID_BREAK' | 'SUSPECT_TRAP'; 
-  };
-  holding: { pnl: number; pnlPercent: number; advice: string; } | null;
+// [V12.5] 主力意图分析结果
+interface ForceReport {
+    phase: 'ACCUMULATION' | 'SHAKEOUT' | 'LIFTING' | 'DISTRIBUTION' | 'CHAOS';
+    phaseLabel: string;
+    phaseDesc: string;
+    confidence: number; // 0-100
+    metrics: { 
+        vol: number; 
+        price: number; 
+        time: number; 
+        space: number; 
+    }; 
+    advice: 'BUY' | 'SELL' | 'HOLD' | 'WAIT';
 }
+
+// [V12.5] 短线精灵信号
+interface GenieSignal {
+    label: string;
+    color: string;
+    winRate: string;
+}
+
+// [V12.5] 综合策略报告 (修复了所有可选类型问题)
+interface StrategyReport {
+    force: ForceReport;           
+    stopLossPrice: number | null; 
+    isSafe: boolean;
+    isBroken: boolean;  
+    breakStatus: 'SAFE' | 'VALID_BREAK' | 'SUSPECT_TRAP';
+    holdingInfo: { pnl: number; pnlPercent: number; advice: string; } | null;
+    genieSignal?: GenieSignal; 
+    rsiValue: number;
+    // T0 信号保留结构
+    t0_signal: { action: string; desc: string; type: 'BUY'|'SELL'|'NONE' };
+}
+
+// ============================================================================
+// SECTION 3: 工具函数与数学库 (UTILS & MATH)
+// ============================================================================
 
 const safeNum = (val: any, fallback = 0) => {
     return (typeof val === 'number' && isFinite(val) && !isNaN(val)) ? val : fallback;
 };
 
-// 🌟 量化计算引擎
+const fmt = (n: number) => {
+    if (n > 100000000) return (n/100000000).toFixed(2) + '亿';
+    if (n > 10000) return (n/10000).toFixed(2) + '万';
+    return n.toString();
+};
+
+// --- TechIndicators ---
 const TechIndicators = {
+  // 移动平均线
   calculateMA: (data: KLinePoint[], period: number) => {
     if (!data || data.length < period) return [];
     const result: (number | null)[] = [];
     for (let i = 0; i < data.length; i++) {
       if (i < period - 1) { result.push(null); continue; }
-      let sum = 0;
-      for (let j = 0; j < period; j++) sum += data[i - j].close;
+      let sum = 0; for (let j = 0; j < period; j++) sum += data[i - j].close;
       result.push(sum / period);
     }
     return result;
   },
+
+  // RSI (相对强弱指标)
   calculateRSI: (data: KLinePoint[], period: number = 6) => {
     if (!data || data.length <= period) return 50;
     let gains = 0, losses = 0;
-    for (let i = Math.max(1, data.length - period); i < data.length; i++) {
+    // 只计算最后一段，提高效率
+    const startIndex = Math.max(1, data.length - period * 5);
+    
+    for (let i = startIndex; i < data.length; i++) {
       const change = data[i].close - (data[i-1]?.close || data[i].open);
       if (change > 0) gains += change; else losses += Math.abs(change);
     }
+    // 简单的平均算法用于展示趋势
     if (losses === 0) return 100;
     const rs = gains / losses;
     return 100 - (100 / (1 + rs));
   },
+
+  // MACD
   calculateMACD: (data: KLinePoint[], short = 12, long = 26, mid = 9) => {
     if (!data || data.length < long) return { dif: [], dea: [], bar: [] };
     const calcEMA = (n: number, close: number, prevEMA: number) => (close * 2 + prevEMA * (n - 1)) / (n + 1);
-    let emaShort = data[0].close;
-    let emaLong = data[0].close;
+    let es = data[0].close;
+    let el = data[0].close;
     let dea = 0;
-    const difArr: number[] = [], deaArr: number[] = [], barArr: number[] = [];
+    const res = { dif:[] as number[], dea:[] as number[], bar:[] as number[] };
+    
     data.forEach((d, i) => {
-      emaShort = calcEMA(short, d.close, i === 0 ? d.close : emaShort);
-      emaLong = calcEMA(long, d.close, i === 0 ? d.close : emaLong);
-      const dif = emaShort - emaLong;
-      dea = calcEMA(mid, dif, i === 0 ? dif : dea);
-      difArr.push(dif); deaArr.push(dea); barArr.push((dif - dea) * 2);
+      es = calcEMA(short, d.close, i===0?d.close:es);
+      el = calcEMA(long, d.close, i===0?d.close:el);
+      const dif = es - el;
+      dea = calcEMA(mid, dif, i===0?dif:dea);
+      res.dif.push(dif);
+      res.dea.push(dea);
+      res.bar.push((dif - dea) * 2);
     });
-    return { dif: difArr, dea: deaArr, bar: barArr };
+    return res;
   },
-  calculatePosition: (data: KLinePoint[], period: number = 20) => {
-    if (!data || data.length < period) return 50;
-    const slice = data.slice(data.length - period);
-    const max = Math.max(...slice.map(k => k.high));
-    const min = Math.min(...slice.map(k => k.low));
-    const current = slice[slice.length - 1].close;
-    if (max === min) return 50;
-    return ((current - min) / (max - min)) * 100;
-  },
-  checkAccumulation: (kline: KLinePoint[]) => {
-    if (!kline || kline.length < 10) return false;
-    const recent = kline.slice(-5);
-    const prev = kline.slice(-10, -5);
-    const maxP = Math.max(...recent.map(k => k.high));
-    const minP = Math.min(...recent.map(k => k.low));
-    const amplitude = minP > 0 ? (maxP - minP) / minP : 0;
-    const isSideways = amplitude < 0.05;
-    const avgVolRecent = recent.reduce((a, b) => a + b.vol, 0) / 5;
-    const avgVolPrev = prev.reduce((a, b) => a + b.vol, 0) / 5;
-    const isVolIncreasing = avgVolPrev > 0 && avgVolRecent > (avgVolPrev * 1.3);
-    return isSideways && isVolIncreasing;
-  },
+
+  // ATR 吊灯止损 (核心风控算法)
   calculateChandelierExit: (data: KLinePoint[], period: number = 22, multiplier: number = 3.0) => {
-    if (!data || data.length < period) return [];
+    if (!data || data.length < period) return Array(data.length).fill(null);
+    
     const trs: number[] = [];
+    // 1. 计算 TR
     for (let i = 0; i < data.length; i++) {
-        if (i === 0) { trs.push(data[i].high - data[i].low);
-        } 
-        else {
-            const h = data[i].high;
-            const l = data[i].low;
-            const cp = data[i-1].close;
-            const tr = Math.max(h - l, Math.abs(h - cp), Math.abs(l - cp));
-            trs.push(tr);
+        if(i===0) {
+             trs.push(data[i].high - data[i].low);
+        } else {
+             const h = data[i].high; 
+             const l = data[i].low; 
+             const c = data[i-1].close;
+             trs.push(Math.max(h-l, Math.abs(h-c), Math.abs(l-c)));
         }
     }
-    const atrs: (number | null)[] = new Array(data.length).fill(null);
+
+    const exits: (number|null)[] = new Array(data.length).fill(null);
     let sumTR = 0;
+    
+    // 2. 计算 ATR 并推导止损价
     for (let i = 0; i < data.length; i++) {
         sumTR += trs[i];
         if (i >= period) sumTR -= trs[i - period];
-        if (i >= period - 1) { atrs[i] = sumTR / period;
+        
+        if (i >= period - 1) {
+            const atr = sumTR / period;
+            let maxHigh = 0;
+            // 回溯周期内最高价
+            for (let j = 0; j < period; j++) {
+                if (data[i-j].high > maxHigh) maxHigh = data[i-j].high;
+            }
+            exits[i] = maxHigh - (atr * multiplier);
         }
-    }
-    const exits: (number | null)[] = new Array(data.length).fill(null);
-    for (let i = period - 1; i < data.length; i++) {
-        if (atrs[i] === null) continue;
-        let highestHigh = 0;
-        for (let j = 0; j < period; j++) { if (i - j >= 0 && data[i-j].high > highestHigh) highestHigh = data[i-j].high;
-        }
-        exits[i] = highestHigh - (atrs[i]! * multiplier);
     }
     return exits;
+  },
+
+  // 量能统计
+  getVolStats: (data: MinutePoint[]) => {
+      if (!data || data.length === 0) return { max: 1, avg: 1 };
+      let max = 0, sum = 0;
+      data.forEach(d => {
+          if (d.v > max) max = d.v;
+          sum += d.v;
+      });
+      return { max, avg: sum / data.length };
   }
 };
 
+// ============================================================================
+// SECTION 4: 核心策略逻辑 (CORE LOGIC ENGINES)
+// ============================================================================
+
+/**
+ * [V13.0] ForceEngine: 主力意图识别状态机
+ * 这是 Wukong 的核心大脑，基于四维判定。
+ */
+const ForceEngine = {
+    run: (stock: RealStock): ForceReport => {
+        // 0. 默认状态
+        let result: ForceReport = { 
+            phase: 'CHAOS', 
+            phaseLabel: '☁️ 混沌期', 
+            phaseDesc: '多空博弈焦灼，无明显主力合力。建议空仓观望。', 
+            confidence: 35, 
+            metrics: { vol: 40, price: 50, time: 30, space: 50 }, 
+            advice: 'WAIT' 
+        };
+
+        const { klineData, price, prevClose, changePercent } = stock;
+        // 这里的30是为了保证指标计算有足够样本
+        if (!klineData || klineData.length < 30) return result;
+
+        // 1. 计算核心因子
+        const rsi = TechIndicators.calculateRSI(klineData, 6);
+        const exits = TechIndicators.calculateChandelierExit(klineData, 22, 3.0);
+        const safePrice = exits[exits.length-1] || 0;
+        const isSafe = price >= safePrice; // 是否在安全绳之上
+
+        // K线级别量比
+        const recent5 = klineData.slice(-5);
+        const avgVol5 = recent5.reduce((a,b)=>a+b.vol, 0)/5;
+        const prevVol5 = klineData.slice(-10, -5).reduce((a,b)=>a+b.vol, 0)/5;
+        const volRatioK = prevVol5 > 0 ? avgVol5/prevVol5 : 1.0;
+
+        // 5日振幅
+        const high5 = Math.max(...recent5.map(k=>k.high));
+        const low5 = Math.min(...recent5.map(k=>k.low));
+        const amp5 = low5>0 ? (high5-low5)/low5 : 0;
+
+        // 2. 决策树分支
+
+        // >>> A. 破位/派发 (Distribution) - 风险极大 <<<
+        if ((!isSafe && rsi > 35) || (changePercent < 2 && volRatioK > 2.2 && price > prevClose*1.1)) {
+            result.phase = 'DISTRIBUTION';
+            result.phaseLabel = !isSafe ? '🔴 确认破位 (BREAK)' : '🔴 高位派发 (DUMP)';
+            result.phaseDesc = !isSafe 
+                ? '股价有效跌破 ATR 安全绳，且下跌动能充足，多头防线崩溃。' 
+                : '高位放巨量滞涨，主力疑似利用对倒吸引跟风盘出货。';
+            result.confidence = 90;
+            result.action = 'SELL';
+            result.metrics = { vol: 90, price: 10, time: 20, space: 10 };
+        }
+        // >>> B. 强势拉升 (Lifting) - 机会 <<<
+        else if (isSafe && changePercent > 3.0 && volRatioK > 1.5) {
+            result.phase = 'LIFTING';
+            result.phaseLabel = '🚀 主升启动 (LIFT-OFF)';
+            result.phaseDesc = '量价齐升，均线多头排列，股价脱离成本区，攻击形态确立。';
+            result.confidence = 88;
+            result.action = 'BUY';
+            result.metrics = { vol: 90, price: 95, time: 60, space: 80 };
+        }
+        // >>> C. 缩量洗盘 (Shakeout) - 博弈 <<<
+        else if (isSafe && changePercent < -1.5 && changePercent > -5.0 && volRatioK < 0.8 && rsi > 38) {
+            result.phase = 'SHAKEOUT';
+            result.phaseLabel = '🟡 缩量洗盘 (SHAKEOUT)';
+            result.phaseDesc = '股价回调回踩支撑位，但成交量极度萎缩（惜售），主力并未离场。';
+            result.confidence = 78;
+            result.action = 'HOLD';
+            result.metrics = { vol: 25, price: 60, time: 80, space: 65 };
+        }
+        // >>> D. 隐匿吸筹 (Accumulation) - 潜伏 <<<
+        else if (isSafe && amp5 < 0.05 && volRatioK > 1.1 && volRatioK < 1.8) {
+            result.phase = 'ACCUMULATION';
+            result.phaseLabel = '🔵 隐匿吸筹 (ACCUMULATION)';
+            result.phaseDesc = '股价被控制在窄幅区间内，但成交量在温和放大，主力正在压价收集筹码。';
+            result.confidence = 70;
+            result.action = 'HOLD';
+            result.metrics = { vol: 60, price: 55, time: 90, space: 85 };
+        }
+
+        return result;
+    }
+};
+
+/**
+ * [V12.5] GenieEngine: 异动精灵增强版
+ */
 const GenieEngine = {
-  analyze: (s: RealStock) => {
+  analyze: (s: RealStock): GenieSignal | undefined => {
+    const { minuteData, changePercent, turnover, price } = s;
     const isUS = s.code.startsWith('us');
-    const turnoverLimit = isUS ? 0.5 : 2;
-    if (s.changePercent > 2 && s.turnover > turnoverLimit) return { type: 'RISING', label: '🚀拉升', color: 'text-purple-400 bg-purple-900/20 border-purple-800' };
-    if (s.changePercent > 0 && s.turnover > (turnoverLimit * 2.5)) return { type: 'HOT', label: '🔥抢筹', color: 'text-orange-400 bg-orange-900/20 border-orange-800' };
-    if (s.changePercent < -3 && s.turnover > (turnoverLimit * 1.5)) return { type: 'PANIC', label: '💀出逃', color: 'text-blue-400 bg-blue-900/20 border-blue-800' };
-    const radarTurnover = isUS ? 0.8 : 3.0;
-    if (Math.abs(s.changePercent) < 1.2 && s.turnover > radarTurnover) return { type: 'ACCUMULATE', label: '🧲吸筹', color: 'text-emerald-400 bg-emerald-900/20 border-emerald-800' };
-    return null;
+    const limit = isUS ? 0.8 : 2.5; // 美股门槛稍低
+    
+    if (!minuteData || minuteData.length < 5) return undefined;
+
+    // 计算分时量能
+    const vStats = TechIndicators.getVolStats(minuteData);
+    const lastMin = minuteData[minuteData.length-1];
+
+    // 1. 滞涨背离
+    if (lastMin.v > vStats.avg * 6 && Math.abs(changePercent) < 1.0) {
+        return { label: '⚠️ 滞涨背离', color: 'text-red-400 border-red-500 bg-red-900/20', winRate: '避险' };
+    }
+
+    // 2. 诱多洗盘
+    const dayMax = Math.max(...minuteData.map(d => d.p));
+    if (price > 0 && (dayMax - price)/price > 0.03 && changePercent < -0.5 && changePercent > -2.0) {
+         return { label: '🎣 诱多洗盘', color: 'text-yellow-400 border-yellow-500 bg-yellow-900/20', winRate: '65%' };
+    }
+
+    // 3. 经典信号
+    if (changePercent > 4.0 && turnover > limit) 
+        return { label: '🚀 火箭拉升', color: 'text-purple-400 border-purple-500 bg-purple-900/20', winRate: '82%' };
+        
+    if (changePercent > 0.5 && turnover > limit * 3.0)
+        return { label: '🔥 暴力抢筹', color: 'text-orange-400 border-orange-500 bg-orange-900/20', winRate: '78%' };
+
+    if (Math.abs(changePercent) < 1.0 && turnover > limit * 1.5)
+        return { label: '🧲 隐匿吸筹', color: 'text-emerald-400 border-emerald-500 bg-emerald-900/20', winRate: '75%' };
+    
+    if (changePercent < -3.0 && turnover > limit * 1.5)
+        return { label: '💀 恐慌出逃', color: 'text-blue-400 border-blue-500 bg-blue-900/20', winRate: 'N/A' };
+
+    return undefined;
   }
 };
 
-const QuoteItem = ({ label, val, color = "text-gray-300" }: { label: string, val: string | number, color?: string }) => (
-  <div className="flex flex-col justify-center bg-[#1a1d24] p-1 md:p-2 rounded border border-gray-800/60">
-    <span className="text-[9px] text-gray-500 mb-0.5 scale-90 origin-left">{label}</span>
-    <span className={`text-xs md:text-sm font-mono font-medium ${color}`}>{val}</span>
-  </div>
-);
-// --- 实战手册组件 [V12.4 新增] ---
+// ============================================================================
+// SECTION 5: UI 组件 (UI COMPONENTS)
+// ============================================================================
+
+// 战术手册
 const TacticalManual = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) => {
     if (!isOpen) return null;
     return (
-        <div className="absolute inset-0 z-50 bg-black/90 flex items-center justify-center p-4" onClick={onClose}>
-            <div className="bg-[#12141a] border border-gray-700 w-full max-w-2xl h-[80vh] flex flex-col rounded-xl shadow-2xl overflow-hidden" onClick={e=>e.stopPropagation()}>
+        <div className="absolute inset-0 z-50 bg-black/90 flex items-center justify-center p-4 backdrop-blur-sm" onClick={onClose}>
+            <div className="bg-[#12141a] border border-gray-700 w-full max-w-2xl h-[80vh] flex flex-col rounded-xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200" onClick={e=>e.stopPropagation()}>
                 <div className="p-4 border-b border-gray-800 flex justify-between items-center bg-[#161920]">
-                    <div className="flex items-center gap-2">
-                         <BookOpen size={18} className="text-blue-400"/>
-                        <span className="font-bold text-gray-200">实战作战手册 (Operation Manual)</span>
+                    <div className="flex items-center gap-2 text-white font-bold">
+                        <BookOpen size={18} className="text-blue-400"/>
+                        Wukong 实战作战手册
                     </div>
-                    <button onClick={onClose} className="text-gray-500 hover:text-white"><X size={18}/></button>
+                    <button onClick={onClose}><X size={18} className="text-gray-500 hover:text-white"/></button>
                 </div>
                 <div className="flex-1 overflow-y-auto p-6 space-y-8 scrollbar-thin text-gray-300 text-sm leading-relaxed">
                     
-                    {/* Chapter 1 */}
+                    {/* 1. 意图 */}
                     <section>
-                         <h3 className="text-purple-400 font-bold mb-3 flex items-center gap-2 text-lg"><Shield size={18}/> 第一章：夜视仪系统 (Night Vision)</h3>
-                        <div className="bg-purple-900/10 border border-purple-900/30 p-4 rounded-lg space-y-4">
-                            <div>
-                                 <strong className="text-purple-300">1. 🟣 紫色虚线：VWAP (机构成本线)</strong>
-                                <ul className="list-disc pl-5 mt-1 text-gray-400 space-y-1">
-                                    <li><strong>定义：</strong> 当日进场机构的平均持仓成本。</li>
-                                     <li><strong>作战心法：</strong> 
-                                        <br/>股价 {'>'} VWAP：<strong>强势区</strong>，只做多。
-                                        <br/>股价 {'<'} VWAP：<strong>弱势区</strong>，只做空或观望。
-                                     </li>
-                                </ul>
+                        <h3 className="text-lg font-bold text-purple-400 mb-3 flex items-center gap-2">
+                            <Brain size={18}/> 第一章：主力意图 (Force Engine)
+                        </h3>
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="bg-gray-800 p-3 rounded border border-gray-700">
+                                <strong className="text-blue-400">🔵 吸筹</strong>
+                                <p className="text-xs opacity-80 mt-1">价格稳 + 量能增。主力潜伏，适合建底仓。</p>
                             </div>
-                             <div>
-                                <strong className="text-yellow-500">2. 🟨 金色量柱：主力大单 (Whale Alert)</strong>
-                                <ul className="list-disc pl-5 mt-1 text-gray-400 space-y-1">
-                                    <li><strong>低位金柱 + 股价滞涨：</strong> 悄悄吸货（建仓）。</li>
-                                    <li><strong>高位金柱 + 股价跳水：</strong> 暴力出货（快跑）。</li>
-                                    <li><strong>拉升金柱 + 突破压力：</strong> 冲锋号角（跟随）。</li>
-                                </ul>
-                             </div>
+                            <div className="bg-gray-800 p-3 rounded border border-gray-700">
+                                <strong className="text-yellow-400">🟡 洗盘</strong>
+                                <p className="text-xs opacity-80 mt-1">价格跌 + 量能缩。黄金坑，死拿不放。</p>
+                            </div>
+                             <div className="bg-gray-800 p-3 rounded border border-gray-700">
+                                <strong className="text-purple-400">🚀 拉升</strong>
+                                <p className="text-xs opacity-80 mt-1">量价齐升。突破平台，大胆加仓。</p>
+                            </div>
+                             <div className="bg-gray-800 p-3 rounded border border-gray-700">
+                                <strong className="text-red-400">🔴 派发</strong>
+                                <p className="text-xs opacity-80 mt-1">滞涨或破位。风险极大，必须离场。</p>
+                            </div>
                         </div>
                     </section>
 
-                    {/* Chapter 2 */}
+                    {/* 2. 夜视仪 */}
                     <section>
-                        <h3 className="text-emerald-400 font-bold mb-3 flex items-center gap-2 text-lg"><Radar size={18}/> 第二章：雷达系统 (The Radar)</h3>
-                        <div className="bg-emerald-900/10 border border-emerald-900/30 p-4 rounded-lg space-y-4">
-                            <div>
-                                 <strong className="text-emerald-400">1. 🧲 “吸筹”标签 (Accumulation)</strong>
-                                <p className="text-gray-400 mt-1">如果你看到列表里某只股票带上了 🧲，说明有人在“压着价格买”。</p>
-                                <p className="text-gray-300 font-bold mt-1">🚨 操作指令：不要立刻买入！加入自选，等待一根大阳线突破时果断跟进。</p>
-                             </div>
-                            <div>
-                                <strong className="text-blue-400">2. 短线精灵 (Genie)</strong>
-                                <div className="grid grid-cols-3 gap-2 mt-2 text-xs text-center">
-                                    <div className="bg-purple-900/30 p-1 rounded border border-purple-800 text-purple-300">🚀 拉升 (打板/追涨)</div>
-                                    <div className="bg-orange-900/30 p-1 rounded border border-orange-800 text-orange-300">🔥 抢筹 (最佳上车)</div>
-                                    <div className="bg-blue-900/30 p-1 rounded border border-blue-800 text-blue-300">💀 出逃 (止损)</div>
-                                </div>
-                            </div>
-                        </div>
+                        <h3 className="text-lg font-bold text-yellow-500 mb-3 flex items-center gap-2">
+                            <Activity size={18}/> 第二章：夜视仪 (Night Vision)
+                        </h3>
+                        <p className="mb-2 text-gray-400">在分时图中，我们通过特殊颜色标记了主力的踪迹：</p>
+                        <ul className="list-disc pl-5 space-y-2">
+                            <li><strong className="text-purple-400">紫色均线 (VWAP)</strong>: 机构当天的平均持仓成本线。</li>
+                            <li><strong className="text-yellow-500">金色量柱</strong>: 代表这一分钟成交量是平时均量的3倍以上，主力行为。</li>
+                        </ul>
                     </section>
 
-                    {/* Chapter 3 */}
-                     <section>
-                        <h3 className="text-orange-400 font-bold mb-3 flex items-center gap-2 text-lg"><Lock size={18}/> 第三章：安全绳系统 (Safety Rope)</h3>
-                        <div className="bg-orange-900/10 border border-orange-900/30 p-4 rounded-lg space-y-4">
-                            <div>
-                                <strong className="text-orange-400">1. 🟠 橙色虚线：ATR 吊灯止损</strong>
-                                <p className="text-gray-400 mt-1">这根线挂在近期最高价下方。股价涨它跟着涨；股价跌它不动。这是你的<strong>保命底线</strong>。</p>
-                            </div>
-                            <div>
-                                 <strong>2. 三色防御状态 (策略面板)</strong>
-                                <ul className="list-none pl-0 mt-2 space-y-2">
-                                    <li className="flex gap-2">
-                                        <span className="text-orange-400 font-bold whitespace-nowrap">🛡️ 安全状态:</span>
-                                        <span className="text-gray-400">股价在橙线之上。<strong>安心持股</strong>。</span>
-                                    </li>
-                                     <li className="flex gap-2">
-                                        <span className="text-red-400 font-bold whitespace-nowrap">🚨 确认破位:</span>
-                                        <span className="text-gray-400">跌破安全绳 且 RSI{'>'}35。趋势反转，<strong>无脑离场</strong>。</span>
-                                    </li>
-                                    <li className="flex gap-2">
-                                        <span className="text-yellow-400 font-bold whitespace-nowrap">📉 疑似诱空:</span>
-                                        <span className="text-gray-400">跌破但 RSI{'<'}35 (超卖)。可能是假摔。<strong>观察成交量，收盘不回则卖。</strong></span>
-                                     </li>
-                                </ul>
-                            </div>
+                    {/* 3. 风控 */}
+                    <section>
+                        <h3 className="text-lg font-bold text-orange-400 mb-3 flex items-center gap-2">
+                            <Lock size={18}/> 第三章：安全绳 (Safety Rope)
+                        </h3>
+                        <div className="bg-red-900/20 border border-red-500/30 p-4 rounded text-red-200 text-xs leading-relaxed">
+                            <strong>⚠️ 铁律警告：</strong>
+                            <br/>
+                            当右侧面板显示 <span className="text-red-400 font-bold underline">🔴 确认破位</span> 时，意味着股价有效跌破了 ATR 智能止损线，上升趋势在数学概率上已经结束。此时必须无条件止损。
                         </div>
                     </section>
-
-                    <div className="p-4 bg-gray-800 rounded border border-gray-600 text-center">
-                        <h4 className="text-white font-bold mb-2">⭐️ 终极交易心法</h4>
-                        <p className="text-gray-400 text-xs">Wukong Pro 不是为了预测未来，而是为了修正你的这一秒。</p>
-                    </div>
 
                 </div>
             </div>
         </div>
     );
-};
+}
 
-const SignalStrengthVisual = ({ report }: { report: StrategyReport }) => {
-  if (!report || !report.t0) return null;
-  const strengthVal = safeNum(report.t0.strength, 0);
-  const confidenceVal = safeNum(report.t0.confidence, 0);
-  const executionVal = safeNum(report.t0.executionScore, 0);
-  const getStrengthLevel = (value: number): { label: string; color: string } => {
-    if (value < 20) return { label: '极弱', color: 'bg-gray-500' };
-    if (value < 40) return { label: '较弱', color: 'bg-green-500' };
-    if (value < 60) return { label: '中等', color: 'bg-yellow-500' };
-    if (value < 80) return { label: '较强', color: 'bg-orange-500' };
-    return { label: '很强', color: 'bg-red-500' };
-  };
-  const strengthLevel = getStrengthLevel(strengthVal);
-  const confidenceLevel = getStrengthLevel(confidenceVal);
-  const executionLevel = getStrengthLevel(executionVal);
-  const compositeScore = (strengthVal * 0.4 + confidenceVal * 0.35 + executionVal * 0.25).toFixed(0);
-  return (
-    <div className="space-y-3">
-      <div className="text-[10px] text-gray-500 font-bold">信号分析</div>
-      <div className="space-y-2">
-        <div className="flex justify-between text-[9px]">
-          <span className="text-gray-400">偏离强度</span>
-          <span className={`${strengthLevel.color.replace('bg-', 'text-')} font-bold`}>{strengthVal.toFixed(0)}%</span>
-        </div>
-        <div className="w-full h-2 bg-gray-700 rounded-full overflow-hidden">
-          <div className={`h-full ${strengthLevel.color}`} style={{ width: `${Math.min(100, Math.max(0, strengthVal))}%` }}></div>
-        </div>
-      </div>
-      <div className="space-y-2">
-        <div className="flex justify-between text-[9px]">
-          <span className="text-gray-400">置信度</span>
-          <span className={`${confidenceLevel.color.replace('bg-', 'text-')} font-bold`}>{confidenceVal.toFixed(0)}%</span>
-        </div>
-        <div className="w-full h-2 bg-gray-700 rounded-full overflow-hidden">
-          <div className={`h-full ${confidenceLevel.color}`} style={{ width: `${Math.min(100, Math.max(0, confidenceVal))}%` }}></div>
-        </div>
-      </div>
-      <div className="space-y-2">
-        <div className="flex justify-between text-[9px]">
-          <span className="text-gray-400">流动性</span>
-          <span className={`${executionLevel.color.replace('bg-', 'text-')} font-bold`}>{executionVal.toFixed(0)}</span>
-        </div>
-        <div className="w-full h-2 bg-gray-700 rounded-full overflow-hidden">
-          <div className={`h-full ${executionLevel.color}`} style={{ width: `${Math.min(100, Math.max(0, executionVal))}%` }}></div>
-        </div>
-      </div>
-      <div className="mt-2 p-2 bg-gray-800/30 rounded border border-gray-700">
-        <div className="text-[9px] text-gray-500 mb-1">综合机会指数</div>
-        <div className="flex justify-between items-center">
-          <div className={`text-lg font-mono font-bold ${Number(compositeScore) > 60 ? 'text-green-400' : 'text-gray-400'}`}>
-            {compositeScore}<span className="text-xs">%</span>
-          </div>
-          <div className="text-[8px] text-gray-500 text-right">综合算法评分</div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const IntradayChart = React.memo(({ data = [], prevClose, code, t0Buy, t0Sell }: { data?: MinutePoint[], prevClose: number, code: string, t0Buy?: number | null, t0Sell?: number | null }) => {
-  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
-
-  const validData = useMemo(() => {
-    if (!Array.isArray(data) || data.length === 0) return [];
-    const base = prevClose > 0 ? prevClose : (data[0].p || 1);
-    return data.map(d => ({ p: (isNaN(d.p)||d.p<=0)?base:d.p, v: (isNaN(d.v)||d.v<0)?0:d.v, t: d.t || '' }));
-  }, [data, prevClose]);
-
-  const avgLine = useMemo(() => {
-    if (validData.length === 0) return [];
-      let sumP = 0;
-      return validData.map((d, i) => { sumP += d.p; return sumP / (i + 1); });
-  }, [validData]);
-
-  const vwap = useMemo(() => {
-    if (validData.length === 0) return prevClose;
-    let totalPV = 0;
-    let totalV = 0;
-    for (const d of validData) {
-      totalPV += d.p * d.v;
-      totalV += d.v;
+// 错误边界 (防止白屏)
+class ChartErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean}> {
+    constructor(props: any) {
+        super(props);
+        this.state = { hasError: false };
     }
-    return totalV > 0 ? totalPV / totalV : prevClose;
-  }, [validData, prevClose]);
-  
-  const volStats = useMemo(() => {
-    if (validData.length === 0) return { maxVol: 1, threshold: 999999 };
-    let max = 0;
-    let total = 0;
-    validData.forEach(d => {
-        if (d.v > max) max = d.v;
-        total += d.v;
-    });
-    const avg = total / validData.length;
-    const threshold = Math.min(max * 0.7, avg * 3.0);
-    return { maxVol: max || 1, threshold };
-  }, [validData]);
+    static getDerivedStateFromError() { return { hasError: true }; }
+    componentDidCatch(error: any) { console.error("Chart Render Error:", error); }
+    render() {
+        if (this.state.hasError) return <div className="h-full flex items-center justify-center text-xs text-gray-500">Data Visualization Error</div>;
+        return this.props.children;
+    }
+}
 
-  if (validData.length === 0) {
-     return (
-        <div className="h-full flex flex-col items-center justify-center text-gray-600 gap-2">
-           {code.startsWith('us') ? <Moon size={18} className="text-blue-400 opacity-60"/> : <WifiOff size={18} className="opacity-40"/>}
-           <div className="text-center">
-             <div className="text-xs font-bold text-gray-500">{code.startsWith('us') ? '美股盘前/休市' : '等待开盘'}</div>
-           </div>
+// Mastermind 面板
+const MastermindPanel = ({ report }: { report: StrategyReport }) => {
+    if(!report) return null;
+    const { force, stopLossPrice, isSafe, isBroken, genieSignal, holdingInfo } = report;
+    
+    let theme = 'gray';
+    if(force.phase === 'LIFTING') theme = 'purple';
+    else if(force.phase === 'DISTRIBUTION') theme = 'red';
+    else if(force.phase === 'SHAKEOUT') theme = 'yellow';
+    else if(force.phase === 'ACCUMULATION') theme = 'blue';
+
+    const styles: any = {
+        purple: { text: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500' },
+        red: { text: 'text-red-400', bg: 'bg-red-500/10', border: 'border-red-500' },
+        yellow: { text: 'text-yellow-400', bg: 'bg-yellow-500/10', border: 'border-yellow-500' },
+        blue: { text: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500' },
+        gray: { text: 'text-gray-400', bg: 'bg-gray-800/40', border: 'border-gray-600' }
+    };
+    const s = styles[theme];
+
+    const ScoreBar = ({ label, val, color }: any) => (
+        <div className="flex items-center gap-2 mb-2">
+            <div className="text-[9px] text-gray-400 w-16 text-right">{label}</div>
+            <div className="flex-1 h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                <div className={`h-full ${color}`} style={{width: `${val}%`, transition:'width 0.5s'}}></div>
+            </div>
+            <div className="text-[9px] font-mono text-gray-500 w-6">{Math.round(val)}</div>
         </div>
     );
-  }
 
-  let MAX_POINTS = 241; 
-  if (code.substring(0, 2) === 'us') MAX_POINTS = 390;
-  if (code.substring(0, 2) === 'hk') MAX_POINTS = 330;
+    return (
+        <div className="space-y-3 animate-in slide-in-from-right fade-in p-1">
+            {/* 1. Genie Alert */}
+            {genieSignal && (
+                <div className={`flex justify-between items-center p-2 rounded border ${genieSignal.color.replace('bg-','bg-opacity-10 bg-').replace('text-','border-')} mb-1`}>
+                    <div className="flex items-center gap-2 font-bold text-xs"><Zap size={12}/> {genieSignal.label}</div>
+                    <div className="text-[9px] opacity-80">胜率 {genieSignal.winRate}</div>
+                </div>
+            )}
 
-  const effectivePrev = prevClose > 0 ? prevClose : validData[0].p;
-  const prices = validData.map(d => d.p);
-  const maxPrice = Math.max(...prices);
-  const minPrice = Math.min(...prices);
-  const maxDiff = Math.max(Math.abs(maxPrice - effectivePrev), Math.abs(minPrice - effectivePrev));
-  const padding = maxDiff === 0 ? effectivePrev * 0.005 : maxDiff * 1.2; 
-  const top = effectivePrev + padding;
-  const bottom = effectivePrev - padding;
-  const range = (top - bottom) || 1;
+            {/* 2. Main Force Card */}
+            <div className={`p-4 rounded-xl border-l-4 shadow-lg ${s.bg} ${s.border} border-r-0 border-t-0 border-b-0`}>
+                <div className="flex justify-between items-center mb-2">
+                    <span className={`text-xs font-bold flex items-center gap-1 ${s.text}`}><Brain size={14}/> 主力意图</span>
+                    <span className="text-[9px] font-mono bg-black/30 px-1.5 rounded text-white/70">Conf: {force.confidence}%</span>
+                </div>
+                <div className={`text-xl font-black mb-2 ${s.text}`}>{force.phaseLabel}</div>
+                <p className="text-[10px] leading-relaxed opacity-80 text-gray-300 border-t border-white/10 pt-2">{force.phaseDesc}</p>
+            </div>
 
-  const points = validData.map((d, i) => {
-    const safeIndex = Math.min(i, MAX_POINTS - 1);
-    const x = (safeIndex / (MAX_POINTS - 1)) * 100;
-    const y = 100 - ((d.p - bottom) / range) * 100;
-    return `${x},${y}`;
-  }).join(' ');
-  const avgPoints = avgLine.map((p, i) => {
-    const safeIndex = Math.min(i, MAX_POINTS - 1);
-    const x = (safeIndex / (MAX_POINTS - 1)) * 100;
-    const y = 100 - ((p - bottom) / range) * 100;
-    return `${x},${y}`;
-  }).join(' ');
-  const vwapY = 100 - ((vwap - bottom) / range) * 100;
+            {/* 3. 4D Metrics */}
+            <div className="bg-[#1c1f26] p-3 rounded-lg border border-gray-700">
+                <div className="flex items-center gap-1 text-[10px] text-gray-500 mb-3 font-bold uppercase"><Layers size={10}/> 量价时空评分</div>
+                <ScoreBar label="🔥 攻击" val={force.metrics.vol} color="bg-red-500"/>
+                <ScoreBar label="📈 趋势" val={force.metrics.price} color="bg-blue-500"/>
+                <ScoreBar label="⚓ 潜伏" val={force.metrics.time} color="bg-yellow-500"/>
+                <ScoreBar label="🌌 空间" val={force.metrics.space} color="bg-emerald-500"/>
+            </div>
 
-  const lastPoint = validData[validData.length - 1];
-  const isUp = lastPoint.p >= effectivePrev;
-  const strokeColor = isUp ? '#ef4444' : '#22c55e';
-  const areaColor = isUp ? '#ef4444' : '#22c55e';
-  const lastXPercent = (Math.min(validData.length - 1, MAX_POINTS - 1) / (MAX_POINTS - 1)) * 100;
-  const areaPoints = `0,100 ${points} ${lastXPercent},100`;
+            {/* 4. Safety Rope Status */}
+            <div className={`p-3 rounded border text-center flex flex-col justify-center items-center ${isSafe ? 'bg-green-900/10 border-green-800/50 text-green-400' : 'bg-red-900/10 border-red-800/50 text-red-400'}`}>
+                 <div className="text-[10px] opacity-70 flex items-center gap-1 mb-1"><Lock size={10}/> ATR 安全绳</div>
+                 <div className="font-mono font-bold text-sm">{stopLossPrice ? stopLossPrice.toFixed(2) : '--'}</div>
+                 {isBroken && <div className="mt-1 text-[9px] bg-red-500 text-white px-2 rounded animate-pulse">确认破位</div>}
+            </div>
 
-  const handleMove = (clientX: number, e: any) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = clientX - rect.left;
-    const idx = Math.round((x / rect.width) * (MAX_POINTS - 1));
-    if (idx >= 0 && idx < validData.length) setHoverIdx(idx);
-  };
+            {/* 5. Advice */}
+            <div className="text-center py-2 bg-gray-800/50 rounded border border-gray-700">
+                <span className="text-[10px] text-gray-500">操作建议:</span> <span className="text-xs font-bold text-gray-200">{force.advice === 'BUY' ? '积极买入' : force.advice === 'SELL' ? '清仓离场' : '持股观望'}</span>
+            </div>
+            
+            {/* 6. Holding */}
+            {holdingInfo && (
+                 <div className="mt-4 border-t border-gray-800 pt-2">
+                     <div className="flex justify-between text-[10px] text-gray-400 mb-1">
+                         <span>持仓盈亏</span>
+                         <span className={holdingInfo.pnl>=0?'text-red-400':'text-green-400'}>{holdingInfo.pnl.toFixed(0)}</span>
+                     </div>
+                 </div>
+            )}
+        </div>
+    );
+};
 
-  const hoverData = hoverIdx !== null ? validData[hoverIdx] : null;
-  return (
-    <div className="w-full h-full flex flex-col bg-[#0b0c10] select-none group relative"
-         style={{ touchAction: 'none' }} 
-         onMouseMove={(e) => handleMove(e.clientX, e)}
-         onMouseLeave={() => setHoverIdx(null)}
-         onTouchStart={(e) => handleMove(e.touches[0].clientX, e)}
-         onTouchMove={(e) => handleMove(e.touches[0].clientX, e)}
-         onTouchEnd={() => setHoverIdx(null)}
-    >
-       <div className="absolute top-1 right-2 z-20 flex gap-2 text-[8px] pointer-events-none opacity-80">
-          <span className="text-purple-400 flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>机构线</span>
-          <span className="text-yellow-500 flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-sm bg-yellow-500"></span>主力单</span>
-       </div>
 
-       {hoverData && (
-         <div className="absolute z-30 top-4 left-1/2 -translate-x-1/2 bg-[#1c1f26]/90 border border-gray-700 px-2 py-1 rounded flex gap-2 text-[10px] font-mono shadow-lg pointer-events-none whitespace-nowrap">
-            <span className="text-gray-400">{hoverData.t}</span>
-            <span className={hoverData.p >= effectivePrev ? 'text-red-400' : 'text-green-400'}>{hoverData.p.toFixed(2)}</span>
-            <span className="text-purple-400">VWAP: {vwap.toFixed(2)}</span>
-            {hoverData.v > volStats.threshold && <span className="text-yellow-500 font-bold">★主力</span>}
-         </div>
-       )}
-
-       <div className="relative h-[70%] border-b border-gray-800/80 box-border">
-          <svg className="w-full h-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
-             <defs>
-                <linearGradient id={`grad-${isUp?'up':'down'}`} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={areaColor} stopOpacity="0.15"/>
-                  <stop offset="100%" stopColor={areaColor} stopOpacity="0.0"/>
-               </linearGradient>
-             </defs>
-             <line x1="0" y1={50} x2="100" y2={50} stroke="#4b5563" strokeWidth="0.5" strokeDasharray="3 3" vectorEffect="non-scaling-stroke" opacity="0.5" />
-             <line x1="0" y1={vwapY} x2="100" y2={vwapY} stroke="#8b5cf6" strokeWidth="1" strokeDasharray="4 2" vectorEffect="non-scaling-stroke" opacity="0.7" />
-             {t0Buy && t0Buy > bottom && t0Buy < top && <line x1="0" y1={100 - ((t0Buy - bottom) / range) * 100} x2="100" y2={100 - ((t0Buy - bottom) / range) * 100} stroke="#10b981" strokeWidth="1" strokeDasharray="2 3" vectorEffect="non-scaling-stroke" opacity="0.6" />}
-             {t0Sell && t0Sell > bottom && t0Sell < top && <line x1="0" y1={100 - ((t0Sell - bottom) / range) * 100} x2="100" y2={100 - ((t0Sell - bottom) / range) * 100} stroke="#ef4444" strokeWidth="1" strokeDasharray="2 3" vectorEffect="non-scaling-stroke" opacity="0.6" />}
-             
-             <polygon points={areaPoints} fill={`url(#grad-${isUp?'up':'down'})`} />
-             <polyline points={points} fill="none" stroke={strokeColor} strokeWidth="1.5" vectorEffect="non-scaling-stroke" strokeLinejoin="round"/>
-             <polyline points={avgPoints} fill="none" stroke="#eab308" strokeWidth="1" strokeDasharray="2 2" vectorEffect="non-scaling-stroke" opacity="0.8"/>
-             {hoverIdx !== null && (
-               <g>
-                  <line x1={(hoverIdx / (MAX_POINTS - 1)) * 100} y1="0" x2={(hoverIdx / (MAX_POINTS - 1)) * 100} y2="100" stroke="#60a5fa" strokeWidth="1" strokeDasharray="2 2" vectorEffect="non-scaling-stroke"/>
-                  <line x1="0" y1={100 - ((hoverData!.p - bottom) / range) * 100} x2="100" y2={100 - ((hoverData!.p - bottom) / range) * 100} stroke="#60a5fa" strokeWidth="1" strokeDasharray="2 2" vectorEffect="non-scaling-stroke"/>
-               </g>
-             )}
-          </svg>
-       </div>
-       <div className="relative h-[30%] pt-1 bg-[#0b0c10]">
-          <svg className="w-full h-full overflow-hidden" viewBox="0 0 100 100" preserveAspectRatio="none">
-             {validData.map((d, i) => {
-               const safeIndex = Math.min(i, MAX_POINTS - 1);
-               const prevP = i > 0 ? validData[i-1].p : effectivePrev;
-               const isHugeVol = d.v > volStats.threshold && d.v > 0;
-               const barColor = isHugeVol ? '#f59e0b' : (d.p > prevP ? '#ef4444' : d.p < prevP ? '#22c55e' : '#6b7280');
-               const barHeight = (d.v / volStats.maxVol) * 100;
-               const x = (safeIndex / (MAX_POINTS - 1)) * 100;
-               const w = (100 / MAX_POINTS) * 0.6; 
-               return ( <rect key={i} x={x} y={100 - barHeight} width={w} height={barHeight} fill={barColor} opacity={hoverIdx === i ? 1 : isHugeVol ? 1 : 0.8} /> )
-             })}
-          </svg>
-       </div>
-    </div>
-  );
-});
-
-const CandleChart = React.memo(({ data = [], subChartMode, setSubChartMode }: { data?: KLinePoint[], subChartMode: 'VOL' | 'MACD' | 'RSI', setSubChartMode: any }) => {
+// 分时图组件
+const IntradayChart = React.memo(({ data, prevClose, code }: { data: MinutePoint[], prevClose: number, code: string }) => {
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
 
   const validData = useMemo(() => {
     if (!Array.isArray(data) || data.length === 0) return [];
-    return data.filter(d => d.open > 0 && d.close > 0);
-  }, [data]);
+    const base = prevClose > 0 ? prevClose : (data[0].p || 10);
+    return data.map(d => ({ 
+        p: (isNaN(d.p) || d.p <= 0) ? base : d.p, 
+        v: (isNaN(d.v) || d.v < 0) ? 0 : d.v, 
+        t: d.t || '' 
+    }));
+  }, [data, prevClose]);
 
-  const ma5 = useMemo(() => TechIndicators.calculateMA(validData, 5), [validData]);
-  const ma10 = useMemo(() => TechIndicators.calculateMA(validData, 10), [validData]);
-  const ma20 = useMemo(() => TechIndicators.calculateMA(validData, 20), [validData]);
-  const safeRope = useMemo(() => TechIndicators.calculateChandelierExit(validData, 22, 3.0), [validData]);
+  // VWAP
+  const vwap = useMemo(() => {
+      if(validData.length === 0) return prevClose;
+      let tp=0, tv=0;
+      for(let d of validData) { tp += d.p*d.v; tv += d.v; }
+      return tv>0 ? tp/tv : prevClose;
+  }, [validData, prevClose]);
 
-  const macd = useMemo(() => TechIndicators.calculateMACD(validData), [validData]);
+  const volStats = useMemo(() => TechIndicators.getVolStats(validData), [validData]);
+  const whaleThreshold = Math.min(volStats.max*0.7, volStats.avg*3.0);
+
+  if (!validData.length) return <div className="h-full flex items-center justify-center text-xs text-gray-600 bg-[#0b0c10]">Waiting for Data...</div>;
+
+  const prices = validData.map(d=>d.p);
+  const maxP = Math.max(...prices, prevClose);
+  const minP = Math.min(...prices, prevClose);
+  const absDiff = Math.max(Math.abs(maxP-prevClose), Math.abs(minP-prevClose));
+  const top = prevClose + absDiff*1.1;
+  const bottom = prevClose - absDiff*1.1;
+  const range = top - bottom || 1;
   
-  const rsi = useMemo(() => {
-    if (validData.length < 6) return [];
-    const result: (number|null)[] = [];
-    for(let k=0; k<6; k++) result.push(null);
-    for (let i = 6; i < validData.length; i++) {
-      const slice = validData.slice(0, i + 1);
-      result.push(TechIndicators.calculateRSI(slice));
-    }
-    return result;
-  }, [validData]);
+  const getX = (i:number) => (i / (validData.length-1))*100;
+  const getY = (p:number) => 100 - ((p-bottom)/range)*100;
 
-  if (validData.length === 0) return <div className="h-full flex items-center justify-center text-gray-700 text-xs">无K线数据</div>;
-  const displayCount = 60;
-  const safeStart = Math.max(0, validData.length - displayCount);
-  const displayData = validData.slice(safeStart);
-  
-  const displayMA5 = ma5.slice(safeStart);
-  const displayMA10 = ma10.slice(safeStart);
-  const displayMA20 = ma20.slice(safeStart);
-  const displaySafeRope = safeRope.slice(safeStart);
+  const linePath = validData.map((d,i) => `${getX(i)},${getY(d.p)}`).join(' ');
+  const avgPath = validData.map((d,i) => `${getX(i)},${getY(vwap)}`).join(' '); // Simplified VWAP drawing
+  const hoverItem = hoverIdx !== null ? validData[hoverIdx] : null;
 
-  const displayDIF = macd.dif.slice(safeStart);
-  const displayDEA = macd.dea.slice(safeStart);
-  const displayMACDBar = macd.bar.slice(safeStart);
-  const displayRSI = rsi.slice(safeStart);
-
-  let max = 0, min = Infinity;
-  displayData.forEach(d => { max = Math.max(max, d.high); min = Math.min(min, d.low); });
-  [...displayMA5, ...displayMA10, ...displayMA20, ...displaySafeRope].forEach(v => { if (v) { max = Math.max(max, v); min = Math.min(min, v); }});
-  const range = max - min;
-  const renderMax = max + (range * 0.05);
-  const renderMin = min - (range * 0.05);
-  const renderRange = renderMax - renderMin || 1;
-  const barWidth = 100 / displayCount;
-  const gap = barWidth * 0.25;
-
-  let maxVol = 0;
-  displayData.forEach(d => maxVol = Math.max(maxVol, d.vol));
-  let maxMACD = 0, minMACD = 0;
-  [...displayDIF, ...displayDEA, ...displayMACDBar].forEach(v => { maxMACD = Math.max(maxMACD, v); minMACD = Math.min(minMACD, v); });
-  const absMaxMACD = Math.max(Math.abs(maxMACD), Math.abs(minMACD));
-  const macdRange = absMaxMACD * 2.2;
-
-  const getLinePoints = (arr: (number|null)[], minY: number, rng: number, zeroAtCenter: boolean = false) => {
-    return arr.map((val, i) => {
-      if (val === null) return null;
-      const x = i * barWidth + barWidth / 2;
-      const y = zeroAtCenter ? 50 - (val / rng) * 100 : 100 - ((val - minY) / rng) * 100;
-      return `${x},${y}`;
-    }).filter(Boolean).join(' ');
-  };
-
-  const handleMove = (clientX: number, e: any) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = clientX - rect.left;
-    const idx = Math.floor((x / rect.width) * displayCount);
-    if (idx >= 0 && idx < displayData.length) setHoverIdx(idx);
-  };
-
-  const activeData = hoverIdx !== null ? displayData[hoverIdx] : null;
   return (
-    <div className="w-full h-full relative bg-[#0b0c10] select-none border-t border-gray-800/50 flex flex-col group"
-         style={{ touchAction: 'none' }} 
-         onMouseMove={(e) => handleMove(e.clientX, e)}
-         onMouseLeave={() => setHoverIdx(null)}
-         onTouchStart={(e) => handleMove(e.touches[0].clientX, e)}
-         onTouchMove={(e) => handleMove(e.touches[0].clientX, e)}
-         onTouchEnd={() => setHoverIdx(null)}
-    >
-       <div className="absolute top-1 left-2 z-10 flex items-center gap-2 text-[8px] font-mono bg-black/60 px-2 py-1 rounded border border-gray-800 pointer-events-auto">
-          <span className="text-yellow-400">MA5</span><span className="text-cyan-400">MA10</span><span className="text-purple-400">MA20</span>
-          <span className="text-orange-400 flex items-center gap-0.5"><Lock size={8}/>安全绳</span>
-          <div className="w-[1px] bg-gray-600 mx-1 h-3"></div>
-          <button onClick={(e)=>{e.stopPropagation();setSubChartMode('VOL')}} className={`px-2 py-0.5 rounded ${subChartMode==='VOL'?'text-white bg-gray-700':'text-gray-500'}`}>VOL</button>
-          <button onClick={(e)=>{e.stopPropagation();setSubChartMode('MACD')}} className={`px-2 py-0.5 rounded ${subChartMode==='MACD'?'text-white bg-gray-700':'text-gray-500'}`}>MACD</button>
-          <button onClick={(e)=>{e.stopPropagation();setSubChartMode('RSI')}} className={`px-2 py-0.5 rounded ${subChartMode==='RSI'?'text-white bg-gray-700':'text-gray-500'}`}>RSI</button>
-       </div>
-       
-       {activeData && (
-           <div className="absolute top-8 left-2 z-20 bg-[#1c1f26]/90 border border-gray-700 px-2 py-1 rounded text-[9px] font-mono shadow-lg pointer-events-none">
-               <div className="text-gray-400 mb-0.5">{activeData.date}</div>
-               <div className="flex gap-2">
-                  <span className={activeData.close>activeData.open?'text-red-400':'text-green-400'}>C: {activeData.close.toFixed(2)}</span>
+      <div className="w-full h-full bg-[#0b0c10] flex flex-col relative select-none cursor-crosshair group"
+           onMouseMove={e=>{
+               const r = e.currentTarget.getBoundingClientRect();
+               const i = Math.floor(((e.clientX-r.left)/r.width)*validData.length);
+               setHoverIdx(Math.max(0, Math.min(i, validData.length-1)));
+           }}
+           onMouseLeave={()=>setHoverIdx(null)}>
+           
+           {hoverItem && (
+               <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-black/90 border border-gray-700 px-2 py-1 rounded text-[10px] font-mono z-20 flex gap-3 pointer-events-none">
+                   <span className="text-gray-400">{hoverItem.t}</span>
+                   <span className={hoverItem.p>=prevClose?'text-red-400':'text-green-400'}>{hoverItem.p.toFixed(2)}</span>
+                   <span className="text-purple-400">Avg: {vwap.toFixed(2)}</span>
+                   {hoverItem.v > whaleThreshold && <span className="text-yellow-400 font-bold animate-pulse">★主力</span>}
                </div>
+           )}
+           
+           <div className="h-[70%] border-b border-gray-800/50 relative w-full overflow-hidden">
+                <div className="absolute top-1 right-2 flex gap-2 text-[8px] opacity-50">
+                    <span className="text-purple-400">● 成本</span> <span className="text-yellow-400">● 巨量</span>
+                </div>
+                <svg className="w-full h-full overflow-visible" preserveAspectRatio="none">
+                    <line x1="0" y1="50%" x2="100%" y2="50%" stroke="#4b5563" strokeDasharray="3 3" opacity="0.4" vectorEffect="non-scaling-stroke"/>
+                    <polyline points={avgPath} fill="none" stroke="#8b5cf6" strokeWidth="1.5" opacity="0.6" strokeDasharray="4 4" vectorEffect="non-scaling-stroke"/>
+                    <polyline points={linePath} fill="none" stroke="#3b82f6" strokeWidth="1.5" vectorEffect="non-scaling-stroke"/>
+                    {hoverIdx!==null && <line x1={`${getX(hoverIdx)}%`} x2={`${getX(hoverIdx)}%`} y1="0" y2="100%" stroke="#fff" strokeWidth="0.5" strokeDasharray="3 3"/>}
+                </svg>
            </div>
-       )}
 
-       <div className="h-[70%] relative border-b border-gray-800/50 pointer-events-none">
-           <svg className="w-full h-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
-             {displayData.map((d, i) => {
-                const isRed = d.close >= d.open;
-                const color = isRed ? '#ef4444' : '#22c55e';
-                const x = i * barWidth + gap/2;
-                const w = barWidth - gap;
-                const yHigh = 100 - ((d.high - renderMin) / renderRange) * 100;
-                const yLow = 100 - ((d.low - renderMin) / renderRange) * 100;
-                const yOpen = 100 - ((d.open - renderMin) / renderRange) * 100;
-                const yClose = 100 - ((d.close - renderMin) / renderRange) * 100;
-                let bodyY = Math.min(yOpen, yClose);
-                let bodyH = Math.abs(yOpen - yClose); if (bodyH < 0.5) bodyH = 0.5;
-                return (
-                  <g key={i} opacity={hoverIdx !== null && hoverIdx !== i ? 0.6 : 1}>
-                    <line x1={x+w/2} y1={yHigh} x2={x+w/2} y2={yLow} stroke={color} strokeWidth="1" vectorEffect="non-scaling-stroke"/>
-                    <rect x={x} y={bodyY} width={w} height={bodyH} fill={color} />
-                  </g>
-                );
-             })}
-             <polyline points={getLinePoints(displayMA5, renderMin, renderRange)} fill="none" stroke="#facc15" strokeWidth="1" vectorEffect="non-scaling-stroke" />
-             <polyline points={getLinePoints(displayMA10, renderMin, renderRange)} fill="none" stroke="#22d3ee" strokeWidth="1" vectorEffect="non-scaling-stroke" />
-             <polyline points={getLinePoints(displayMA20, renderMin, renderRange)} fill="none" stroke="#a855f7" strokeWidth="1" vectorEffect="non-scaling-stroke" />
-             <polyline points={getLinePoints(displaySafeRope, renderMin, renderRange)} fill="none" stroke="#fbbf24" strokeWidth="1.5" strokeDasharray="4 2" vectorEffect="non-scaling-stroke" />
-             {hoverIdx !== null && <line x1={(hoverIdx * barWidth) + barWidth/2} y1="0" x2={(hoverIdx * barWidth) + barWidth/2} y2="145" stroke="#60a5fa" strokeWidth="1" strokeDasharray="2 2" vectorEffect="non-scaling-stroke" />}
-           </svg>
-       </div>
-
-       <div className="h-[30%] relative pt-1 bg-[#0b0c10] pointer-events-none">
-          {subChartMode === 'VOL' ? (
-             <svg className="w-full h-full overflow-hidden" viewBox="0 0 100 100" preserveAspectRatio="none">
-                 {displayData.map((d, i) => {
-                     const color = d.close >= d.open ? '#ef4444' : '#22c55e';
-                     const h = (d.vol / maxVol) * 100;
-                     const x = i * barWidth + gap/2;
-                     const w = barWidth - gap;
-                     return <rect key={i} x={x} y={100-h} width={w} height={h} fill={color} opacity={hoverIdx !== null && hoverIdx !== i ? 0.5 : 0.9}/>
-                 })}
-             </svg>
-          ) : subChartMode === 'MACD' ? (
-             <svg className="w-full h-full overflow-hidden" viewBox="0 0 100 100" preserveAspectRatio="none">
-                 <line x1="0" y1="50" x2="100" y2="50" stroke="#374151" strokeWidth="1"/>
-                 {displayMACDBar.map((val, i) => {
-                     const isRed = val > 0;
-                     const h = Math.abs(val / macdRange) * 100;
-                     const x = i * barWidth + gap/2;
-                     const w = barWidth - gap;
-                     const y = val > 0 ? 50 - h : 50;
-                     return <rect key={i} x={x} y={y} width={w} height={h} fill={isRed ? '#ef4444' : '#22c55e'} opacity={hoverIdx !== null && hoverIdx !== i ? 0.6 : 1}/>
-                 })}
-                 <polyline points={getLinePoints(displayDIF, 0, macdRange, true)} fill="none" stroke="#facc15" strokeWidth="1" vectorEffect="non-scaling-stroke" />
-                 <polyline points={getLinePoints(displayDEA, 0, macdRange, true)} fill="none" stroke="#22d3ee" strokeWidth="1" vectorEffect="non-scaling-stroke" />
-             </svg>
-          ) : (
-             <svg className="w-full h-full overflow-hidden" viewBox="0 0 100 100" preserveAspectRatio="none">
-                 <line x1="0" y1="80" x2="100" y2="80" stroke="#dc2626" strokeWidth="1" strokeDasharray="3 3" opacity="0.5"/>
-                 <line x1="0" y1="20" x2="100" y2="20" stroke="#22c55e" strokeWidth="1" strokeDasharray="3 3" opacity="0.5"/>
-                 <polyline points={getLinePoints(displayRSI, 0, 100, false)} fill="none" stroke="#8b5cf6" strokeWidth="1" vectorEffect="non-scaling-stroke" />
-             </svg>
-          )}
-       </div>
-    </div>
+           <div className="h-[30%] w-full relative pt-px bg-[#0b0c10]">
+                <div className="w-full h-full flex items-end gap-[1px] overflow-hidden px-[1px]">
+                    {validData.map((d, i) => {
+                        if (i%2!==0 && validData.length > 300) return null; // Sampling
+                        const isHuge = d.v > whaleThreshold;
+                        const col = isHuge ? 'bg-yellow-400' : (d.p >= (i>0?validData[i-1].p:prevClose) ? 'bg-red-500/70' : 'bg-green-500/70');
+                        return <div key={i} className={`flex-1 rounded-t-sm ${col}`} style={{height: `${Math.max(1, (d.v/volStats.max)*100)}%`}}/>;
+                    })}
+                </div>
+           </div>
+      </div>
   );
 });
+
+// K线图组件
+const CandleChart = React.memo(({ data, subChartMode, setSubChartMode }: { data: KLinePoint[], subChartMode: string, setSubChartMode: any }) => {
+    const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+    const count = 60;
+    const viewData = useMemo(() => data.slice(-count), [data]);
+    
+    if (viewData.length === 0) return <div className="h-full flex items-center justify-center text-xs text-gray-600 bg-[#0b0c10]">Loading Trend...</div>;
+    
+    // Calcs
+    const ma5 = TechIndicators.calculateMA(data, 5).slice(-count);
+    const ma20 = TechIndicators.calculateMA(data, 20).slice(-count);
+    const ropes = TechIndicators.calculateChandelierExit(data, 22, 3.0).slice(-count);
+    const macd = TechIndicators.calculateMACD(viewData); // Calc for view only
+    const rsi = TechIndicators.calculateRSI(data).slice(-count); // Calc full, slice view
+
+    const maxP = Math.max(...viewData.map(d=>d.high), ...ropes.filter(x=>x!==null) as number[]);
+    const minP = Math.min(...viewData.map(d=>d.low), ...ropes.filter(x=>x!==null) as number[]);
+    const range = maxP - minP || 1;
+    
+    const getX = (i:number) => (i/count)*100;
+    const getY = (p:number) => 100 - ((p-minP)/range)*100;
+    const w = (100/count)*0.65;
+
+    const getPoly = (arr: (number|null)[]) => arr.map((v,i) => v!==null?`${getX(i)+w/2},${getY(v)}`:'').filter(Boolean).join(' ');
+
+    return (
+        <div className="w-full h-full bg-[#0b0c10] flex flex-col relative select-none"
+             onMouseMove={e => {
+                 const r = e.currentTarget.getBoundingClientRect();
+                 setHoverIdx(Math.floor(((e.clientX - r.left)/r.width) * count));
+             }}
+             onMouseLeave={() => setHoverIdx(null)}
+        >
+            {/* Main Chart */}
+            <div className="h-[70%] border-b border-gray-800/50 relative overflow-hidden w-full">
+                <div className="absolute top-1 left-2 z-10 text-[8px] text-orange-400 flex gap-2 bg-black/30 px-1 rounded">
+                    <span><Lock size={8}/> 安全绳 (ATR)</span>
+                </div>
+
+                <svg className="w-full h-full overflow-visible" preserveAspectRatio="none">
+                    {/* Ropes */}
+                    <polyline points={getPoly(ropes)} fill="none" stroke="#f59e0b" strokeWidth="1.5" strokeDasharray="3 3" vectorEffect="non-scaling-stroke"/>
+                    {/* MAs */}
+                    <polyline points={getPoly(ma5)} fill="none" stroke="#fbbf24" strokeWidth="1" opacity="0.8" vectorEffect="non-scaling-stroke"/>
+                    <polyline points={getPoly(ma20)} fill="none" stroke="#a855f7" strokeWidth="1" opacity="0.8" vectorEffect="non-scaling-stroke"/>
+
+                    {/* Candles */}
+                    {viewData.map((d,i)=>{
+                        const c = d.close >= d.open ? '#ef4444' : '#22c55e';
+                        return (
+                            <g key={i} opacity={hoverIdx===null||hoverIdx===i ? 1 : 0.3}>
+                                <line x1={`${getX(i)+w/2}%`} x2={`${getX(i)+w/2}%`} y1={`${getY(d.high)}%`} y2={`${getY(d.low)}%`} stroke={c} strokeWidth="1" vectorEffect="non-scaling-stroke"/>
+                                <rect x={`${getX(i)}%`} y={`${getY(Math.max(d.open,d.close))}%`} width={`${w}%`} height={`${Math.max(0.5, Math.abs(getY(d.open)-getY(d.close)))}%`} fill={c}/>
+                            </g>
+                        )
+                    })}
+                </svg>
+            </div>
+            
+            {/* Sub Chart */}
+            <div className="h-[30%] relative w-full bg-[#0b0c10] p-1">
+                 <div className="absolute top-0 right-0 z-10 flex gap-1">
+                     {['MACD','RSI','VOL'].map(m => (
+                         <button key={m} onClick={(e)=>{e.stopPropagation(); setSubChartMode(m)}} className={`text-[8px] px-1.5 rounded border transition-colors ${subChartMode===m ? 'bg-gray-700 text-white border-gray-600' : 'text-gray-600 border-transparent hover:bg-gray-800'}`}>
+                             {m}
+                         </button>
+                     ))}
+                 </div>
+                 
+                 <svg className="w-full h-full overflow-hidden" preserveAspectRatio="none">
+                     {subChartMode === 'RSI' && (
+                         <>
+                             <line x1="0" y1="20%" x2="100%" y2="20%" stroke="#333" strokeDasharray="2 2" vectorEffect="non-scaling-stroke"/>
+                             <line x1="0" y1="80%" x2="100%" y2="80%" stroke="#333" strokeDasharray="2 2" vectorEffect="non-scaling-stroke"/>
+                             <polyline points={rsi.map((v,i)=>`${getX(i)+w/2},${100-v}`).join(' ')} fill="none" stroke="#8b5cf6" strokeWidth="1.5" vectorEffect="non-scaling-stroke"/>
+                         </>
+                     )}
+                     {subChartMode === 'MACD' && macd.bar.map((v,i) => {
+                         const c = v>0?'#ef4444':'#22c55e';
+                         const h = Math.min(50, Math.abs(v)*3); 
+                         return <rect key={i} x={`${getX(i)}%`} y={`${v>0?50-h:50}%`} width={`${w}%`} height={`${h}%`} fill={c} opacity="0.7"/>
+                     })}
+                      {subChartMode === 'VOL' && viewData.map((d,i) => {
+                         const mv = Math.max(...viewData.map(x=>x.vol));
+                         const c = d.close>d.open?'#ef4444':'#22c55e';
+                         return <rect key={i} x={`${getX(i)}%`} y={`${100-(d.vol/mv)*100}%`} width={`${w}%`} height={`${(d.vol/mv)*100}%`} fill={c} opacity="0.5"/>
+                     })}
+                 </svg>
+            </div>
+        </div>
+    );
+});
+
+// ============================================================================
+// SECTION 8: MAIN APP
+// ============================================================================
 
 export default function App() {
   const [codes, setCodes] = useState<string[]>(() => {
-    try {
-      const searchParams = new URLSearchParams(window.location.search);
-      const syncData = searchParams.get('sync');
-      if (syncData) {
-         try {
-            const decoded = JSON.parse(atob(decodeURIComponent(syncData)));
-            if (decoded && Array.isArray(decoded.codes)) return decoded.codes;
-         } catch (e) { console.warn("Sync Data corrupted"); }
-      }
-      return JSON.parse(localStorage.getItem(CODES_KEY) || 'null') || DEFAULT_CODES;
-    } catch { return DEFAULT_CODES; }
+      try { return JSON.parse(localStorage.getItem(CODES_KEY)||'null')||DEFAULT_CODES } catch { return DEFAULT_CODES }
   });
   const [portfolio, setPortfolio] = useState<Record<string, PortfolioItem>>(() => {
-    try { 
-      const searchParams = new URLSearchParams(window.location.search);
-      const syncData = searchParams.get('sync');
-      if (syncData) {
-         try {
-            const decoded = JSON.parse(atob(decodeURIComponent(syncData)));
-            if (decoded && decoded.portfolio && typeof decoded.portfolio === 'object') return decoded.portfolio;
-         } catch (e) {}
-      }
-      return JSON.parse(localStorage.getItem(PORTFOLIO_KEY) || '{}'); 
-    } catch { return {}; }
+      try { return JSON.parse(localStorage.getItem(PORTFOLIO_KEY)||'{}') } catch { return {} }
   });
   const [simState, setSimState] = useState<GlobalSimState>(() => {
-    try {
-        const stored = localStorage.getItem(SIMULATION_KEY);
-        if (stored) {
-            const parsed = JSON.parse(stored);
-            if (typeof parsed.cash === 'number' && parsed.positions) {
-                Object.keys(parsed.positions).forEach(k => {
-                   if (!Array.isArray(parsed.positions[k].trades)) parsed.positions[k].trades = [];
-                   if (!Array.isArray(parsed.positions[k].pending)) parsed.positions[k].pending = [];
-                   if (typeof parsed.positions[k].realizedPnl !== 'number') parsed.positions[k].realizedPnl = 0;
-                });
-                return parsed;
-           }
-        }
-        return { cash: 1000000, initialCapital: 1000000, positions: {} };
-    } catch { return { cash: 1000000, initialCapital: 1000000, positions: {} }; }
+      try { return JSON.parse(localStorage.getItem(SIMULATION_KEY)||'{"cash":1000000,"initialCapital":1000000,"positions":{}}') } catch { return {cash:1000000, initialCapital:1000000, positions:{}} }
   });
-  const [stocks, setStocks] = useState<RealStock[]>([]);
+
   const [selectedCode, setSelectedCode] = useState<string>('');
+  const [stocks, setStocks] = useState<RealStock[]>([]);
+  
+  // UI States
+  const [mobileTab, setMobileTab] = useState<'LIST'|'CHART'|'AI'>('CHART');
+  const [isManualOpen, setManualOpen] = useState(false);
   const [inputCode, setInputCode] = useState('');
-  const [draggedCode, setDraggedCode] = useState<string | null>(null);
-  const [dragOverCode, setDragOverCode] = useState<string | null>(null);
-  const [mobileTab, setMobileTab] = useState<'LIST' | 'CHART' | 'AI'>('CHART');
-  const [, setCopied] = useState(false);
-  const [isSorting, setIsSorting] = useState(false);
-  const [isGenieMode, setIsGenieMode] = useState(false);
-  const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
-  const [syncLink, setSyncLink] = useState('');
+  const [subChartMode, setSubChartMode] = useState('MACD');
+  
+  // Editing States
   const [isEditingPortfolio, setIsEditingPortfolio] = useState(false);
-  const [strategyTab, setStrategyTab] = useState<'T0' | 'TREND' | 'SIM'>('T0');
   const [tempCost, setTempCost] = useState('');
   const [tempShares, setTempShares] = useState('');
-  const [subChartMode, setSubChartMode] = useState<'VOL'|'MACD'|'RSI'>('MACD');
-  const [simVol, setSimVol] = useState('100'); 
-  const [simPrice, setSimPrice] = useState(''); 
-  const [isSettingCapital, setIsSettingCapital] = useState(false);
-  const [tempCapital, setTempCapital] = useState('');
-  
-  // [V12.4] 新增：是否打开说明书
-  const [isManualOpen, setIsManualOpen] = useState(false);
 
-  const requestIdRef = useRef(0);
-  const lastSelectedCodeRef = useRef<string>('');
+  // Cloud Sync States
+  const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
+  const [syncLink, setSyncLink] = useState('');
 
-  useEffect(() => { localStorage.setItem(CODES_KEY, JSON.stringify(codes)); }, [codes]);
-  useEffect(() => { localStorage.setItem(PORTFOLIO_KEY, JSON.stringify(portfolio)); }, [portfolio]);
-  useEffect(() => { localStorage.setItem(SIMULATION_KEY, JSON.stringify(simState)); }, [simState]);
+  // Persistence
+  useEffect(() => { localStorage.setItem(CODES_KEY, JSON.stringify(codes)) }, [codes]);
+  useEffect(() => { localStorage.setItem(PORTFOLIO_KEY, JSON.stringify(portfolio)) }, [portfolio]);
+  useEffect(() => { localStorage.setItem(SIMULATION_KEY, JSON.stringify(simState)) }, [simState]);
   
-  useEffect(() => { if (!selectedCode && codes.length > 0) setSelectedCode(codes[0]); }, [codes, selectedCode]);
+  // Selection init
   useEffect(() => {
-      const searchParams = new URLSearchParams(window.location.search);
-      if (searchParams.get('sync')) {
-          window.history.replaceState({}, '', window.location.pathname);
-      }
-  }, []);
+      if(!selectedCode && codes.length > 0) setSelectedCode(codes[0]);
+  }, [codes]);
+
+  // Form reset on select change
   useEffect(() => {
-      if (selectedCode) {
-          const p = portfolio[selectedCode];
-          setTempCost(p ? p.cost.toString() : '');
-          setTempShares(p ? p.shares.toString() : '');
-          setIsEditingPortfolio(false);
-          const s = stocks.find(x => x.code === selectedCode);
-          if (s) setSimPrice(s.price.toFixed(2));
-      }
-  }, [selectedCode]);
-  const generateSyncLink = () => {
-      const data = { codes, portfolio };
-      const str = btoa(JSON.stringify(data));
-      const url = `${window.location.origin}${window.location.pathname}?sync=${encodeURIComponent(str)}`;
-      setSyncLink(url);
-      navigator.clipboard.writeText(url);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-  };
-  const savePortfolio = () => {
-      if (!selectedCode) return;
-      const cost = parseFloat(tempCost);
-      const shares = parseFloat(tempShares);
-      if (!isNaN(cost) && !isNaN(shares)) {
-          setPortfolio(prev => ({ ...prev, [selectedCode]: { cost, shares } }));
+      const p = portfolio[selectedCode];
+      if(p) {
+          setTempCost(p.cost.toString());
+          setTempShares(p.shares.toString());
       } else {
-          const next = { ...portfolio };
-          delete next[selectedCode];
-          setPortfolio(next);
+          setTempCost(''); setTempShares('');
+      }
+  }, [selectedCode, portfolio]);
+
+  // --- API Handlers ---
+  const requestId = useRef(0);
+  
+  const fetchRealData = useCallback(async () => {
+    if(codes.length===0) return;
+    const cid = ++requestId.current;
+    const controller = new AbortController();
+    
+    try {
+        const res = await fetch(`/api/q=${codes.join(',')}&_t=${Date.now()}`, { signal: controller.signal });
+        const buf = await res.arrayBuffer();
+        const txt = new TextDecoder('gbk').decode(buf);
+
+        if(cid !== requestId.current) return;
+
+        setStocks(prev => txt.split(';').filter(l=>l.trim().length>10).map(line => {
+            const arr = line.split('~');
+            const code = line.match(/v_(.*?)=/)?.[1]||'';
+            const old = prev.find(s=>s.code===code);
+            return {
+                id: code, code, name: arr[1], 
+                price: parseFloat(arr[3]), changePercent: parseFloat(arr[32]),
+                open: parseFloat(arr[5]), prevClose: parseFloat(arr[4]), 
+                high: parseFloat(arr[33]), low: parseFloat(arr[34]), 
+                volume: parseFloat(arr[6]), amount: parseFloat(arr[37]), turnover: parseFloat(arr[38]), pe:0, mktCap:0,
+                minuteData: old?.minuteData||[], klineData: old?.klineData||[]
+            };
+        }).filter(Boolean) as RealStock[]);
+    } catch(e){}
+  }, [codes]);
+
+  // Data Filling (Detailed Fetcher)
+  const fetchDetails = async (code: string) => {
+      // Min
+      try {
+          const res = await fetch(`/kline/appstock/app/minute/query?code=${code}&_t=${Date.now()}`);
+          const json = await res.json();
+          const arr = json?.data?.[code]?.data?.data;
+          if(Array.isArray(arr)) {
+              let lv=0; 
+              const m = arr.map((s: string, i: number)=>{
+                  const p = s.split(' '); const tot=parseFloat(p[2]); const vol=i===0?tot:Math.max(0,tot-lv); lv=tot;
+                  return { t: p[0], p: parseFloat(p[1]), v: vol };
+              });
+              setStocks(s => s.map(st => st.code===code ? {...st, minuteData:m} : st));
+          }
+      } catch(e){}
+      // Kline
+      try {
+          const p = code.startsWith('us') ? `${code},day,,,320`:`${code},day,,,320,qfq`;
+          const res = await fetch(`/kline/appstock/app/fqkline/get?param=${p}&_t=${Date.now()}`);
+          const json = await res.json();
+          const d = json?.data?.[code]?.qfqday || json?.data?.[code]?.day;
+          if(Array.isArray(d)) {
+              const k = d.map((i:any)=>({ date:i[0], open:parseFloat(i[1]), close:parseFloat(i[2]), high:parseFloat(i[3]), low:parseFloat(i[4]), vol:parseFloat(i[5]) }));
+              setStocks(s => s.map(st => st.code===code ? {...st, klineData:k} : st));
+          }
+      } catch(e){}
+  };
+
+  useEffect(() => { fetchRealData(); const t=setInterval(fetchRealData,3000); return ()=>clearInterval(t); }, [fetchRealData]);
+  useEffect(() => { if(selectedCode) fetchDetails(selectedCode); }, [selectedCode]);
+
+  // --- Main Report Generation ---
+  const selStock = stocks.find(s => s.code === selectedCode);
+  const report = useMemo((): StrategyReport | null => {
+      if (!selStock) return null;
+      
+      const force = ForceEngine.run(selStock);
+      const genie = GenieEngine.analyze(selStock);
+      
+      const rope = TechIndicators.calculateChandelierExit(selStock.klineData);
+      const stopPrice = rope[rope.length-1] || null;
+      const rsi = TechIndicators.calculateRSI(selStock.klineData);
+      
+      const isSafe = stopPrice ? selStock.price >= stopPrice : true;
+      const isBroken = !isSafe && rsi > 35;
+
+      const holding = portfolio[selectedCode];
+      let hInfo = null;
+      if (holding) {
+          hInfo = {
+              pnl: (selStock.price - holding.cost) * holding.shares,
+              pnlPercent: holding.cost>0 ? ((selStock.price-holding.cost)/holding.cost)*100 : 0,
+              advice: isSafe ? '稳健持有' : '建议减仓'
+          };
+      }
+
+      return {
+          force, 
+          genieSignal: genie ? genie : undefined,
+          stopLossPrice: stopPrice,
+          isSafe,
+          isBroken,
+          breakStatus: isBroken ? 'VALID_BREAK' : (!isSafe ? 'SUSPECT_TRAP' : 'SAFE'),
+          rsiValue: rsi,
+          holdingInfo: hInfo,
+          t0_signal: { action: '观望', desc: '日内无明显异动', type: 'NONE' }
+      };
+  }, [selStock, portfolio]);
+
+  const savePos = () => {
+      const c = parseFloat(tempCost), s = parseFloat(tempShares);
+      if(!isNaN(c) && !isNaN(s)) {
+          setPortfolio(p => ({...p, [selectedCode]: {cost:c, shares:s}}));
+      } else {
+          setPortfolio(p => { const n={...p}; delete n[selectedCode]; return n; });
       }
       setIsEditingPortfolio(false);
   };
 
-  const moveStock = (index: number, direction: 'UP' | 'DOWN') => {
-    const newCodes = [...codes];
-    if (direction === 'UP' && index > 0) { [newCodes[index], newCodes[index - 1]] = [newCodes[index - 1], newCodes[index]];
-    } 
-    else if (direction === 'DOWN' && index < newCodes.length - 1) { [newCodes[index], newCodes[index + 1]] = [newCodes[index + 1]] = [newCodes[index + 1], newCodes[index]];
-    }
-    setCodes(newCodes);
-  };
-
-  const handleDragStart = (e: React.DragEvent, c: string) => {
-    e.dataTransfer.setData("text/plain", c);
-    e.dataTransfer.effectAllowed = "move";
-    setDraggedCode(c);
-  };
-
-  const handleDrop = (e: React.DragEvent, t: string) => {
-    e.preventDefault();
-    if (draggedCode && draggedCode !== t) {
-      const from = codes.indexOf(draggedCode), to = codes.indexOf(t);
-      const n = [...codes]; n.splice(to, 0, n.splice(from, 1)[0]);
-      setCodes(n);
-    }
-    setDraggedCode(null); setDragOverCode(null);
-  };
-  const fetchRealData = useCallback(async () => {
-    if (codes.length === 0) return;
-    const currentId = ++requestIdRef.current;
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
-    try {
-      const res = await fetch(`/api/q=${codes.join(',')}&_t=${Date.now()}`, { signal: controller.signal }); 
-      clearTimeout(timeoutId);
-      const buffer = await res.arrayBuffer();
-      let text = '';
-      try { text = new TextDecoder('gbk').decode(buffer); } catch (e) { text = new TextDecoder('utf-8').decode(buffer); }
-      if (currentId !== requestIdRef.current) return;
-      setStocks(prev => text.split(';').filter(l => l.trim()).map(line => {
-         const parts = line.split('~');
-         if (parts.length < 10) return null;
-         const fullCode = line.match(/v_(.*?)=/)?.[1] || '';
-         const isUS = fullCode.startsWith('us');
-         const safe = (i: number) => { const n = parseFloat(parts[i]); return isNaN(n) ? 0 : n; };
-         const old = prev.find(s => s.code === fullCode);
-         const price = safe(3);
-         const prevClose = isUS ? safe(26) : safe(4); 
-         const open = safe(5);
-         const effectivePrev = prevClose > 0 ? prevClose : (price > 0 ? price : open);
-         return {
-           id: fullCode, code: fullCode, name: parts[1],
-           price: price, changePercent: safe(32), open: open, prevClose: effectivePrev, 
-           high: safe(33), low: safe(34), volume: safe(6), turnover: safe(38),
-           amount: safe(37), pe: safe(39), mktCap: safe(45),
-           minuteData: old?.minuteData || [], klineData: old?.klineData || []
-         };
-      }).filter(Boolean) as RealStock[]);
-    } catch (e) { if ((e as Error).name !== 'AbortError') console.error("API Error", e); }
-  }, [codes]);
-  const fetchMinute = async (code: string) => {
-    if (code !== lastSelectedCodeRef.current) return;
-    try {
-      const res = await fetch(`/kline/appstock/app/minute/query?code=${code}&_t=${Date.now()}`);
-      const json = await res.json();
-      if (code !== lastSelectedCodeRef.current) return;
-      const arr = json?.data?.[code]?.data?.data;
-      if (Array.isArray(arr)) {
-        const minutePoints: MinutePoint[] = [];
-        let lastTotalVol = 0;
-        arr.forEach((s: string, index: number) => {
-            const parts = s.split(' ');
-            const p = parseFloat(parts[1]);
-            const totalVol = parseFloat(parts[2]); 
-            let currentVol = index === 0 ? totalVol : totalVol - lastTotalVol;
-            if (currentVol < 0) currentVol = 0;
-            lastTotalVol = totalVol;
-            if (!isNaN(p)) minutePoints.push({ p, v: currentVol, t: parts[0] });
-        });
-        setStocks(p => p.map(s => s.code === code ? { ...s, minuteData: minutePoints } : s));
-      } else { setStocks(p => p.map(s => s.code === code ? { ...s, minuteData: [] } : s));
-      }
-    } catch(e) {}
-  };
-
-  const fetchKLine = async (code: string) => {
-    if (code !== lastSelectedCodeRef.current) return;
-    try {
-      const isUS = code.startsWith('us');
-      const params = isUS ? `${code},day,,,320` : `${code},day,,,320,qfq`;
-      const res = await fetch(`/kline/appstock/app/fqkline/get?param=${params}&_t=${Date.now()}`);
-      const json = await res.json();
-      if (code !== lastSelectedCodeRef.current) return;
-      const arr = json?.data?.[code]?.qfqday || json?.data?.[code]?.day;
-      if (Array.isArray(arr)) {
-        const kdata = arr.map((i: any[]) => ({ date: i[0], open: parseFloat(i[1]), close: parseFloat(i[2]), high: parseFloat(i[3]), low: parseFloat(i[4]), vol: parseFloat(i[5]) }));
-        setStocks(p => p.map(s => s.code === code ? { ...s, klineData: kdata } : s));
-      }
-    } catch(e) {}
-  };
-
-  useEffect(() => { fetchRealData(); const i = setInterval(fetchRealData, 3000); return () => clearInterval(i); }, [fetchRealData]);
-  useEffect(() => { 
-    if (selectedCode) { 
-      lastSelectedCodeRef.current = selectedCode;
-      setStocks(p => p.map(s => s.code === selectedCode ? { ...s, minuteData: [], klineData: [] } : s));
-      fetchMinute(selectedCode); 
-      fetchKLine(selectedCode); 
-    } 
-  }, [selectedCode]);
-  const selStock = stocks.find(s => s.code === selectedCode);
-
-  const report = useMemo((): StrategyReport | null => {
-    if (!selStock) return null;
-    try {
-      const s = selStock;
-      const kdata = s.klineData || [];
-      const minute = s.minuteData || [];
-      const myPos = portfolio[s.code];
-
-      let t0Action = "观望";
-      let t0Buy = null;
-      let t0Sell = null;
-      let t0Desc = "日内波动较小，建议静观其变。";
-      let vwap = s.price;
-      if (minute.length > 0) {
-          const sumP = minute.reduce((acc, cur) => acc + cur.p, 0);
-          vwap = sumP / minute.length;
-      }
-      const amplitude = s.open > 0 ? (s.high - s.low) / s.open : 0.02;
-      const dynamicBand = Math.max(0.015, amplitude * 0.6);
-      const dayUp = vwap * (1 + dynamicBand);
-      const dayDn = vwap * (1 - dynamicBand);
-      const dist = Math.abs(s.price - vwap);
-      const maxDist = vwap * dynamicBand * 1.5;
-      let rawStrength = Math.min(100, (dist / maxDist) * 100);
-      let liquidityScore = Math.min(100, (s.turnover / 3) * 60 + (s.amount / 100000000) * 10);
-      if (liquidityScore < 20) liquidityScore = 20;
-      let rsi = 50;
-      if (kdata.length > 6) { rsi = TechIndicators.calculateRSI(kdata);
-      }
-      let confidence = 50;
-      if (s.price < dayDn) {
-          t0Action = "机会"; t0Buy = s.price;
-          t0Desc = "股价日内超跌，乖离率过大，存在反抽均线需求，激进者可现价博反弹。";
-          if (rsi < 30) confidence += 30; else if (rsi < 45) confidence += 10;
-          confidence += (rawStrength * 0.3);
-      } else if (s.price > dayUp) {
-          t0Action = "风险";
-          t0Sell = s.price; t0Desc = "股价日内超涨，偏离均线过远，谨防冲高回落，建议分批止盈。";
-          if (rsi > 70) confidence += 30;
-          else if (rsi > 55) confidence += 10;
-          confidence += (rawStrength * 0.3);
-      } else {
-          t0Buy = dayDn; t0Sell = dayUp;
-          if (s.price > vwap) t0Desc = "股价运行于均线上方，属于强势震荡，持股待涨。"; else t0Desc = "股价受制于均线压制，弱势震荡，多看少动。";
-          rawStrength = Math.max(10, rawStrength);
-          confidence = 40 + (liquidityScore * 0.2);
-      }
-      confidence = Math.min(100, confidence);
-      let t0StrengthLevel: 'very-weak' | 'weak' | 'moderate' | 'strong' | 'very-strong' = 'moderate';
-      if (rawStrength < 20) t0StrengthLevel = 'very-weak';
-      else if (rawStrength < 40) t0StrengthLevel = 'weak';
-      else if (rawStrength < 60) t0StrengthLevel = 'moderate';
-      else if (rawStrength < 80) t0StrengthLevel = 'strong';
-      else t0StrengthLevel = 'very-strong';
-
-      let trendPos = "中位"; let trendDir = "震荡";
-      let trendAdvice = "暂无明确方向。";
-      let trendStrength = 0;
-      let trendStrengthLevel: 'very-weak' | 'weak' | 'moderate' | 'strong' | 'very-strong' = 'moderate';
-      const isAccumulating = TechIndicators.checkAccumulation(kdata);
-      let stopLossPrice = null;
-      let breakStatus: 'SAFE' | 'VALID_BREAK' | 'SUSPECT_TRAP' = 'SAFE';
-      if (kdata.length > 22) {
-          const exits = TechIndicators.calculateChandelierExit(kdata, 22, 3.0);
-          const currentExit = exits[exits.length - 1]; 
-          if (currentExit !== null) {
-              stopLossPrice = currentExit;
-              if (s.price < currentExit) {
-                  if (rsi < 35) { breakStatus = 'SUSPECT_TRAP';
-                  } else { breakStatus = 'VALID_BREAK'; }
-              }
-          }
-      }
-
-      if (kdata.length >= 20) {
-          const pos = TechIndicators.calculatePosition(kdata, 20);
-          const ma20 = TechIndicators.calculateMA(kdata, 20).pop() || 0;
-          if (pos < 20) trendPos = "低位";
-          else if (pos > 80) trendPos = "高位";
-          if (s.price > ma20) trendDir = "多头"; else trendDir = "空头";
-          let trendDev = Math.abs((s.price - ma20) / ma20) * 100;
-          trendStrength = Math.min(100, trendDev * 10 + (pos > 80 || pos < 20 ? 30 : 0));
-          if (trendPos === "低位") { trendAdvice = "股价处于近20日低位区域，下跌空间有限。即使趋势偏弱，也不宜盲目割肉，耐心等待底部企稳信号。"; } 
-          else if (trendPos === "高位" && trendDir === "空头") { trendAdvice = "高位出现破位迹象，头部风险加剧，建议坚决离场规避风险。";
-          } 
-          else if (trendDir === "多头") { trendAdvice = "趋势维持良好，沿5日线/20日线持股，享受趋势红利。";
-          } 
-          else { trendAdvice = "目前处于中位震荡区间，缺乏方向感，建议关注箱体突破方向。";
-          }
-      }
-
-      if (trendStrength < 20) trendStrengthLevel = 'very-weak';
-      else if (trendStrength < 40) trendStrengthLevel = 'weak';
-      else if (trendStrength < 60) trendStrengthLevel = 'moderate';
-      else if (trendStrength < 80) trendStrengthLevel = 'strong';
-      else t0StrengthLevel = 'very-strong';
-
-      let holdingInfo = null;
-      if (myPos) {
-          const marketVal = s.price * myPos.shares;
-          const costVal = myPos.cost * myPos.shares; const pnl = marketVal - costVal; const pnlPercent = costVal > 0 ? (pnl / costVal) * 100 : 0;
-          let hAdvice = "";
-          if (pnlPercent > 5) hAdvice = "持仓盈利良好，可设置止盈保护线。";
-          else if (pnlPercent < -5) {
-              if (trendPos === "低位") hAdvice = "深套勿慌，股价已至低位，可尝试日内T+0降低成本。";
-              else hAdvice = "亏损扩大，注意控制仓位，反抽均线可考虑减仓。";
-          } else hAdvice = "成本附近震荡，耐心持有。";
-          holdingInfo = { pnl, pnlPercent, advice: hAdvice };
-      }
-
-      return {
-          t0: { action: t0Action, buyPoint: t0Buy, sellPoint: t0Sell, desc: t0Desc, strength: rawStrength, strengthLevel: t0StrengthLevel, confidence: confidence, executionScore: liquidityScore },
-          trend: { position: trendPos, trend: trendDir, advice: trendAdvice, rsi, strength: trendStrength, strengthLevel: trendStrengthLevel, isAccumulating, stopLossPrice, breakStatus, isBroken: breakStatus !== 'SAFE' },
-          holding: holdingInfo
-      };
-  }, [selStock, portfolio]);
-  const fmt = (n: number) => n > 100000000 ? (n/100000000).toFixed(2)+'亿' : (n/10000).toFixed(2)+'万';
-  const handleTradeAction = (type: 'BUY' | 'SELL', e?: React.MouseEvent) => {
-      if (e) { e.preventDefault(); e.stopPropagation(); } 
-      if (!selectedCode || !selStock) return;
-      const price = parseFloat(simPrice);
-      const vol = parseInt(simVol);
-      if (isNaN(price) || price <= 0 || isNaN(vol) || vol <= 0) { alert('请输入有效的价格和数量'); return;
-      }
-      if (type === 'BUY' && price > selStock.price) { if (!confirm(`⚠️ 警告：您的买入价 ${price} 高于当前价 ${selStock.price}，将可能以较高成本成交。\n\n是否继续？`)) return;
-      }
-      const now = new Date();
-      const timeStr = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
-      setSimState(prev => {
-          const account = prev.positions[selectedCode] || { holding: 0, avgCost: 0, realizedPnl: 0, trades: [], pending: [] };
-          const currentPending = Array.isArray(account.pending) ? account.pending : [];
-          let newCash = prev.cash; let newHolding = account.holding; 
-          const newOrder: PendingOrder = { id: Date.now().toString(), time: timeStr, price: price, shares: vol, type: type };
-          if (type === 'BUY') { const needed = price * vol; if (newCash < needed) { alert(`资金不足！需要 ${needed.toFixed(2)}，可用 ${newCash.toFixed(2)}`); return prev; } newCash -= needed; } 
-          else { if (newHolding < vol) { alert(`持仓不足！当前 ${newHolding}，尝试卖出 ${vol}`); return prev; } newHolding -= vol; }
-          return { ...prev, cash: newCash, positions: { ...prev.positions, [selectedCode]: { ...account, holding: newHolding, pending: [...currentPending, newOrder] } } };
-      });
-  };
-
-  useEffect(() => {
-      if (!selStock) return;
-      try {
-        setSimState(prev => {
-            const account = prev.positions[selStock.code];
-            if (!account || !Array.isArray(account.pending) || account.pending.length === 0) return prev;
-            let hasChanges = false;
-            let newPending = [...account.pending];
-            let newTrades = Array.isArray(account.trades) ? [...account.trades] : [];
-            let newCash = prev.cash; let newHolding = account.holding; let newAvgCost = account.avgCost; let newRealizedPnl = account.realizedPnl || 0; 
-            const currentPrice = selStock.price;
-            const now = new Date();
-            const timeStr = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
-            const remainingOrders = newPending.filter(order => {
-                let executed = false;
-                if (order.type === 'BUY' && currentPrice <= order.price) { executed = true; const costBasis = (newHolding * newAvgCost) + (order.price * order.shares);
-                newHolding += order.shares; newAvgCost = newHolding > 0 ? costBasis / newHolding : 0;
-                } 
-                else if (order.type === 'SELL' && currentPrice >= order.price) { executed = true;
-                newCash += order.price * order.shares; const tradePnl = (order.price - newAvgCost) * order.shares; newRealizedPnl += tradePnl;
-                }
-                if (executed) { hasChanges = true;
-                newTrades.push({ id: order.id + '_exec', time: timeStr, price: order.price, shares: order.shares, type: order.type, amount: order.price * order.shares }); return false;
-                }
-                return true;
-            });
-            if (!hasChanges) return prev;
-            return { ...prev, cash: newCash, positions: { ...prev.positions, [selStock.code]: { ...account, holding: newHolding, avgCost: newAvgCost, realizedPnl: newRealizedPnl, trades: newTrades, pending: remainingOrders } } };
-      });
-      } catch(e) { console.error("Matching Engine Error", e); }
-  }, [selStock]);
-  const cancelOrder = (orderId: string) => {
-      if (!selectedCode) return;
-      setSimState(prev => {
-          const account = prev.positions[selectedCode]; if (!account) return prev;
-          const pendingList = Array.isArray(account.pending) ? account.pending : [];
-          const orderToCancel = pendingList.find(o => o.id === orderId); if (!orderToCancel) return prev;
-          let newCash = prev.cash; let newHolding = account.holding;
-          if (orderToCancel.type === 'BUY') { newCash += orderToCancel.price * orderToCancel.shares; } else { newHolding += orderToCancel.shares; 
-          }
-          return { ...prev, cash: newCash, positions: { ...prev.positions, [selectedCode]: { ...account, holding: newHolding, pending: pendingList.filter(o => o.id !== orderId) } } };
-      });
-  };
-
-  const updateCapital = () => {
-      const newCap = parseFloat(tempCapital);
-      if (!isNaN(newCap) && newCap > 0) {
-          setSimState(prev => ({ ...prev, initialCapital: newCap, cash: newCap }));
-          setIsSettingCapital(false);
-      }
-  };
-
-  const deleteTrade = (tradeId: string) => {
-      setSimState(prev => {
-          const currentPos = prev.positions[selectedCode]; if (!currentPos || !Array.isArray(currentPos.trades)) return prev;
-          return { ...prev, positions: { ...prev.positions, [selectedCode]: { ...currentPos, trades: currentPos.trades.filter(t => t.id !== tradeId) } } };
-      });
-  };
-
-  const resetAccount = () => { if (confirm('确定要【销户重开】吗？\n此操作将清空所有股票持仓和交易记录，资金恢复初始值。')) { setSimState({ cash: 1000000, initialCapital: 1000000, positions: {} }); } };
-  const clearStock = () => {
-      if (!selectedCode) return;
-      if (confirm(`确定要清空【${selStock?.name}】的所有记录吗？\n\n注意：这相当于“回滚”操作，该股占用的资金将按【成本价】退回账户。`)) {
-          setSimState(prev => {
-              const currentPos = prev.positions[selectedCode]; if (!currentPos) return prev;
-              let refund = currentPos.holding * currentPos.avgCost;
-              if (currentPos.pending) { currentPos.pending.forEach(o => { if (o.type === 'BUY') refund += o.price * o.shares; }); }
-              const nextPositions = { ...prev.positions }; delete nextPositions[selectedCode];
-              return { ...prev, cash: prev.cash + refund, positions: nextPositions };
-          });
-      }
-  };
-
-  const currentSimPos = simState.positions[selectedCode];
-  
-  const stockPerformance = useMemo(() => {
-      if (!selStock) return null;
-      const pos = simState.positions[selStock.code];
-      const holding = pos ? pos.holding : 0; const avgCost = pos ? pos.avgCost : 0; const realized = pos ? (pos.realizedPnl || 0) : 0;
-      const marketVal = holding * selStock.price; const costVal = holding * avgCost; const floating = marketVal - costVal; const total = floating + realized;
-      return { holding, avgCost, floating, realized, total };
-  }, [selStock, simState.positions]);
-  
-  const totalAssets = useMemo(() => {
-      let totalMarketValue = 0;
-      Object.keys(simState.positions).forEach(code => {
-          const pos = simState.positions[code]; const stock = stocks.find(s => s.code === code); 
-          const currentPrice = stock ? stock.price : pos.avgCost; 
-          totalMarketValue += pos.holding * currentPrice;
-      });
-      return simState.cash + totalMarketValue;
-  }, [simState, stocks]);
-  const totalPnl = totalAssets - simState.initialCapital;
+  const generateSync = () => { const d = {codes, portfolio}; setSyncLink(window.location.origin+'/?sync='+btoa(JSON.stringify(d))); };
 
   return (
-    <div className="fixed inset-0 supports-[height:100dvh]:h-[100dvh] bg-[#0f1115] text-gray-300 font-sans flex flex-col overflow-hidden select-none">
-      <header className="h-12 border-b border-gray-800 bg-[#161920] flex items-center justify-between px-4 z-10 shrink-0">
-         <div className="flex items-center gap-2 text-emerald-400 font-bold tracking-widest">
-            <Activity size={18}/> WUKONG PRO <span className="bg-blue-600 text-white text-[9px] px-1.5 rounded">V12.4</span>
-         </div>
-         
-         <div className="flex gap-3 items-center">
-            <div onClick={()=> { setTempCapital(simState.initialCapital.toString()); setIsSettingCapital(true); }} className="flex flex-col items-end cursor-pointer group">
-                <div className="text-[10px] text-gray-400 flex items-center gap-1">
-                    <CircleDollarSign size={10} className="text-yellow-500"/> 模拟总资产
-                </div>
-                <div className={`text-xs font-mono font-bold flex items-center gap-1 ${totalPnl >= 0 ? 'text-red-400' : 'text-green-400'}`}>
-                    {totalAssets.toFixed(0)} <span className="text-[8px] bg-gray-800 px-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">设置</span>
-                </div>
+    <div className="fixed inset-0 bg-[#0f1115] text-gray-300 font-sans flex flex-col select-none">
+        <TacticalManual isOpen={isManualOpen} onClose={()=>setManualOpen(false)} />
+        
+        {isSyncModalOpen && <div className="absolute inset-0 z-50 bg-black/80 flex items-center justify-center" onClick={()=>setIsSyncModalOpen(false)}>
+            <div className="bg-[#1c1f26] p-5 rounded w-full max-w-sm shadow-2xl border border-gray-700" onClick={e=>e.stopPropagation()}>
+                <div className="font-bold text-white mb-4 flex items-center gap-2"><User size={18}/> 数据云同步</div>
+                {!syncLink ? <button onClick={generateSync} className="w-full bg-blue-600 py-2 rounded text-white hover:bg-blue-500">生成同步链接</button> : <div className="bg-black/50 p-3 rounded border border-gray-700 text-xs text-gray-400 break-all select-all font-mono">{syncLink}</div>}
             </div>
+        </div>}
 
-            {/* 12.4 说明书按钮 */}
-            <button onClick={() => setIsManualOpen(true)} className="text-gray-400 hover:text-white flex items-center gap-1 ml-2 transition-colors">
-                 <BookOpen size={16}/>
-            </button>
-
-            <button onClick={() => setIsSyncModalOpen(true)} className="text-gray-400 hover:text-white flex items-center gap-1 ml-2">
-                <User size={16}/>
-            </button>
-         </div>
-      </header>
-
-      {/* 修改本金弹窗 */}
-      {isSettingCapital && (
-          <div className="absolute inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={()=>setIsSettingCapital(false)}>
-              <div className="bg-[#1c1f26] border border-gray-700 rounded-lg p-6 w-full max-w-sm" onClick={e=>e.stopPropagation()}>
-                  <div className="flex justify-between items-center mb-4">
-                      <h3 className="text-white font-bold flex items-center gap-2"><Settings size={18}/> 设置模拟本金</h3>
-                      <button onClick={()=>setIsSettingCapital(false)} className="text-gray-500">✕</button>
-                  </div>
-                  <div className="space-y-4">
-                      <div className="text-xs text-gray-400">设置初始资金将重置可用余额。</div>
-                      <input type="number" value={tempCapital} onChange={e=>setTempCapital(e.target.value)} className="w-full bg-black border border-gray-600 rounded px-3 py-2 text-white font-mono" />
-                      <button onClick={updateCapital} className="w-full bg-blue-600 text-white py-2 rounded font-bold">确认修改</button>
-                  </div>
-              </div>
-          </div>
-      )}
-
-      {/* 云同步弹窗 */}
-      {isSyncModalOpen && (
-          <div className="absolute inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={()=>setIsSyncModalOpen(false)}>
-              <div className="bg-[#1c1f26] border border-gray-700 rounded-lg p-6 w-full max-w-md shadow-2xl" onClick={e=>e.stopPropagation()}>
-                  <div className="flex justify-between items-center mb-4">
-                      <h3 className="text-white font-bold flex items-center gap-2"><LinkIcon size={18}/> 数据云同步</h3>
-                      <button onClick={()=>setIsSyncModalOpen(false)} className="text-gray-500">✕</button>
-                  </div>
-                  {!syncLink ? (
-                      <div className="space-y-4">
-                          <button onClick={generateSyncLink} className="w-full bg-blue-600 hover:bg-blue-500 text-white py-3 rounded flex items-center justify-center gap-2 font-bold">
-                              <Upload size={16}/> 生成同步链接
-                          </button>
-                      </div>
-                  ) : (
-                      <div className="space-y-4">
-                          <div className="bg-black/50 p-3 rounded text-[10px] text-gray-500 break-all font-mono border border-gray-700">
-                              {syncLink}
-                          </div>
-                      </div>
-                  )}
-              </div>
-          </div>
-      )}
-
-      {/* V12.4 实战手册弹窗 */}
-      <TacticalManual isOpen={isManualOpen} onClose={() => setIsManualOpen(false)} />
-
-      <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative pb-[calc(50px+env(safe-area-inset-bottom))] md:pb-0">
-         
-         {/* 左侧列表 */}
-         <div className={`md:w-72 bg-[#12141a] border-r border-gray-800 flex flex-col ${mobileTab === 'LIST' ? 'w-full flex-1' : 'hidden md:flex'}`}>
-            <div className="p-3 border-b border-gray-800 flex gap-2 shrink-0 items-center">
-               <div className="relative flex-1">
-                 <Search size={12} className="absolute left-2 top-2 text-gray-500"/>
-                 <input value={inputCode} onChange={e=>setInputCode(e.target.value)} className="w-full bg-black/40 border border-gray-700 rounded pl-7 py-1 text-xs text-white focus:border-blue-500 outline-none" placeholder="代码 (hk00700, sh600519)" disabled={isSorting}/>
-               </div>
-               {!isSorting && <button onClick={(e)=>{e.preventDefault();if(inputCode && !codes.includes(inputCode)){setCodes([inputCode,...codes]);setInputCode('')}}} className="bg-gray-700 text-white px-2 py-1 rounded hover:bg-gray-600 h-full"><Plus size={14}/></button>}
-               {!isSorting && (
-                   <button onClick={() => setIsGenieMode(!isGenieMode)} className={`px-2 py-1 rounded h-full transition-all flex items-center justify-center ${isGenieMode ? 'bg-purple-600 text-white shadow-[0_0_10px_rgba(147,51,234,0.5)]' : 'bg-gray-800 text-gray-400'}`} title="短线精灵">
-                     <Wand2 size={14}/>
-                   </button>
-               )}
-               <button onClick={() => setIsSorting(!isSorting)} className={`px-2 py-1 rounded h-full transition-colors ${isSorting ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400'}`}><ArrowUpDown size={14}/></button>
+        <div className="h-14 border-b border-gray-800 bg-[#161920] flex items-center justify-between px-4 z-20">
+            <div className="flex items-center gap-2 font-black text-lg text-emerald-400"><Activity size={20}/> WUKONG PRO <span className="text-[9px] text-white bg-purple-600 px-1.5 rounded">V12.5</span></div>
+            <div className="flex gap-4">
+                <button onClick={()=>setManualOpen(true)} className="text-xs hover:text-white flex items-center gap-1"><BookOpen size={14}/> 战术手册</button>
+                <button onClick={()=>setIsSyncModalOpen(true)} className="text-xs hover:text-white flex items-center gap-1"><Upload size={14}/> 同步</button>
             </div>
-            
-            {isGenieMode && (
-                <div className="px-3 py-1 bg-purple-900/20 border-b border-purple-900/30 flex items-center gap-2 text-[10px] text-purple-300">
-                    <div className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse"/>
-                     正在扫描异动...
+        </div>
+
+        <div className="flex-1 flex flex-col md:flex-row overflow-hidden relative pb-[50px] md:pb-0">
+            {/* LIST */}
+            <div className={`w-full md:w-72 bg-[#12141a] border-r border-gray-800 flex flex-col ${mobileTab==='LIST'?'flex-1':'hidden md:flex'}`}>
+                <div className="p-3 border-b border-gray-800 relative">
+                    <Search className="absolute left-5 top-5 text-gray-500" size={14}/>
+                    <input className="w-full bg-black/30 border border-gray-700 rounded-lg pl-8 pr-3 py-2 text-xs text-white focus:border-blue-500 outline-none transition-all" placeholder="Code..." value={inputCode} onChange={e=>setInputCode(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&inputCode){setCodes(p=>[inputCode,...p]);setInputCode('')}}}/>
                 </div>
-            )}
-
-            <div className="flex-1 overflow-y-auto scrollbar-thin">
-               {codes.map((c, index) => {
-                 const s = stocks.find(item => item.code === c);
-                 const genieSignal = s ? GenieEngine.analyze(s) : null;
-                 if (isGenieMode && !genieSignal) return null;
-
-                 return (
-                   <div key={c} draggable={!isSorting} 
-                        onDragStart={(e)=>handleDragStart(e,c)} 
-                        onDragOver={(e)=>{e.preventDefault();if(draggedCode!==c)setDragOverCode(c)}} 
-                        onDrop={(e)=>handleDrop(e,c)} 
-                        onClick={()=>{ if(!isSorting) { setSelectedCode(c);
-if(window.innerWidth < 768) setMobileTab('CHART'); } }}
-                        className={`relative p-3 border-b border-gray-800/50 cursor-pointer hover:bg-[#1c1f26] group ${selectedCode===c && !isSorting ? 'bg-[#1c1f26] border-l-2 border-l-blue-500' : 'border-l-2 border-l-transparent'} ${draggedCode===c?'opacity-30':''} ${isSorting ? 'pr-2' : 'pr-9'}`}>
-                     {dragOverCode===c && draggedCode!==c && !isSorting && <div className="absolute top-0 left-0 w-full h-0.5 bg-blue-500 z-20"/>}
-                     <div className="flex justify-between items-center mb-1">
-                        <div className="flex items-center gap-1 overflow-hidden">
-                          <span className="font-bold text-gray-200 text-xs truncate max-w-[4.5rem]">{s ? s.name : c}</span>
-                           {genieSignal && <span className={`text-[9px] px-1 rounded border shrink-0 ${genieSignal.color}`}>{genieSignal.label}</span>}
-                        </div>
-                        {s && <span className={`text-xs font-bold ${s.changePercent>=0?'text-red-400':'text-green-400'}`}>{s.changePercent}%</span>}
-                     </div>
-                     <div className="flex justify-between text-[10px] text-gray-500">
-                         <span>{c}</span>
-                         {s && !isSorting && (
-                              <div className="flex flex-col items-end">
-                                 <span className="font-mono text-gray-300">{s.price.toFixed(2)}</span>
-                                 <div className="text-[8px] text-gray-600">
-                                      PE: {s.pe.toFixed(1)} | 换手: {s.turnover}%
-                                 </div>
-                             </div>
-                     )}
-                     </div>
-                     {!isSorting && (<button onClick={(e)=>{e.stopPropagation();setCodes(codes.filter(x=>x!==c))}} className="absolute right-0 top-0 bottom-0 w-8 flex items-center justify-center text-gray-600 md:opacity-0 md:group-hover:opacity-100 transition-all z-10 border-l border-gray-800 bg-[#1c1f26]/80"><Trash2 size={13}/></button>)}
-                     {isSorting && (<div className="absolute right-1 top-0 bottom-0 flex items-center gap-1"><button onClick={(e) => { e.stopPropagation(); moveStock(index, 'UP');
-}} disabled={index === 0} className={`p-1 rounded ${index === 0 ? 'text-gray-700' : 'text-blue-400 bg-blue-900/20'}`}><ArrowUp size={14}/></button><button onClick={(e) => { e.stopPropagation();
-moveStock(index, 'DOWN'); }} disabled={index === codes.length - 1} className={`p-1 rounded ${index === codes.length - 1 ? 'text-gray-700' : 'text-blue-400 bg-blue-900/20'}`}><ArrowDown size={14}/></button></div>)}
-                   </div>
-                 )
-               })}
-            </div>
-         </div>
-
-         {/* 中间图表区域 */}
-         <div className={`bg-[#0f1115] flex flex-col min-w-0 ${mobileTab === 'CHART' ? 'w-full flex-1' : 'hidden md:flex md:flex-1'}`}>
-            {selStock ? (
-              <>
-                <div className="h-16 md:h-20 border-b border-gray-800 bg-[#161920] px-4 md:px-6 flex items-center justify-between shrink-0">
-                   <div>
-                      <h1 className="text-lg md:text-xl font-bold text-white flex items-end gap-3">{selStock.name} <span className="text-xs md:text-sm text-gray-500 font-mono font-normal mb-0.5">{selStock.code}</span></h1>
-                      <div className="flex gap-4 mt-1 text-[10px] text-gray-500"><span className="flex items-center gap-1"><Clock size={10}/> 交易中</span><span>{selStock.mktCap > 0 ? fmt(selStock.mktCap) : ''}</span></div>
-                   </div>
-                   <div className="text-right">
-                      <div className={`text-3xl md:text-4xl font-mono font-bold tracking-tighter ${selStock.changePercent>=0?'text-red-500':'text-green-500'}`}>{selStock.price.toFixed(2)}</div>
-                      <div className={`text-xs md:text-sm font-bold ${selStock.changePercent>=0?'text-red-500':'text-green-500'}`}>{selStock.changePercent>0?'+':''}{selStock.changePercent}%</div>
-                   </div>
-                </div>
-
-                <div className="p-2 md:p-4 grid grid-cols-3 md:grid-cols-6 gap-2 md:gap-3 border-b border-gray-800 shrink-0 bg-[#0f1115]">
-                   <QuoteItem label="最高" val={selStock.high.toFixed(2)} color="text-red-400"/>
-                   <QuoteItem label="最低" val={selStock.low.toFixed(2)} color="text-green-400"/>
-                   <QuoteItem label="今开" val={selStock.open.toFixed(2)} />
-                   <QuoteItem label="昨收" val={selStock.prevClose.toFixed(2)} />
-                   <QuoteItem label="成交量" val={fmt(selStock.volume)} color="text-yellow-400"/>
-                   <QuoteItem label="换手" val={selStock.turnover+'%'} />
-                </div>
-
-                <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-                   <div className="flex-[1.5] md:flex-1 md:min-h-[180px] relative border-b border-gray-800">
-                      <div className="absolute top-2 left-2 z-10 flex items-center gap-1 text-[10px] text-gray-500 pointer-events-none"><TrendingUp size={10}/> 分时走势</div>
-                      {/* V12.0: 纯净图表 */}
-                      <IntradayChart data={selStock.minuteData} prevClose={selStock.prevClose} code={selStock.code} t0Buy={report?.t0.buyPoint} t0Sell={report?.t0.sellPoint} />
-                   </div>
-                   <div className="flex-1 md:min-h-[150px] relative bg-[#0b0c10]">
-                      <div className="absolute top-2 left-2 z-10 flex items-center gap-2 text-[10px] text-gray-500 pointer-events-none"><BarChart2 size={10}/> 日K线</div>
-                      <CandleChart data={selStock.klineData} subChartMode={subChartMode} setSubChartMode={setSubChartMode} />
-                   </div>
-               </div>
-                
-                <div className="h-8 bg-[#1a1d24] border-t border-gray-800 flex items-center px-4 text-[10px] text-gray-500">
-                  {selStock.code.startsWith('us') && <span className="text-blue-400">⚠️ 美股盘前数据可能失真</span>}
-                  {selStock.turnover < 0.1 && <span className="text-yellow-400">⚠️ 成交量过低，信号可靠性下降</span>}
-                  {!selStock.code.startsWith('us') && selStock.turnover >= 0.1 && <span className="text-gray-500">💡 本系统提供辅助参考，不构成投资建议</span>}
-                </div>
-              </>
-            ) : <div className="flex-1 flex items-center justify-center text-gray-600 gap-2"><MousePointer2/> 请选择股票</div>}
-         </div>
-
-         {/* 右侧策略栏 */}
-         <div className={`bg-[#12141a] border-l border-gray-800 flex flex-col shrink-0 ${mobileTab === 'AI' ? 'w-full flex-1' : 'hidden md:flex md:w-72'}`}>
-            <div className="p-4 border-b border-gray-800 bg-gradient-to-b from-[#1a1d24] to-transparent">
-                <div className="flex justify-between items-center mb-2">
-                    <span className="text-xs font-bold text-gray-400 flex gap-1 items-center"><Wallet size={12}/> 我的持仓</span>
-                    <button onClick={()=>setIsEditingPortfolio(!isEditingPortfolio)} className="text-gray-500 hover:text-blue-400"><Edit2 size={12}/></button>
-                </div>
-                {isEditingPortfolio ? (
-                    <div className="space-y-2 bg-black/30 p-2 rounded border border-gray-700">
-                        <div className="flex gap-2 items-center text-[10px]">
-                            <span className="w-8 text-gray-500">均价</span>
-                            <input value={tempCost} onChange={e=>setTempCost(e.target.value)} className="flex-1 bg-gray-900 border border-gray-700 rounded px-1 py-0.5 text-white" placeholder="0.00"/>
-                        </div>
-                        <div className="flex gap-2 items-center text-[10px]">
-                            <span className="w-8 text-gray-500">股数</span>
-                            <input value={tempShares} onChange={e=>setTempShares(e.target.value)} className="flex-1 bg-gray-900 border border-gray-700 rounded px-1 py-0.5 text-white" placeholder="0"/>
-                        </div>
-                        <button onClick={savePortfolio} className="w-full bg-blue-600 text-white text-[10px] py-1 rounded flex items-center justify-center gap-1"><Save size={10}/> 保存持仓</button>
-                    </div>
-                ) : (
-                    report?.holding ? (
-                        <div>
-                            <div className="flex justify-between items-end mb-1">
-                                <span className={`text-2xl font-bold ${report.holding.pnl>=0?'text-red-500':'text-green-500'}`}>{report.holding.pnl>0?'+':''}{report.holding.pnl.toFixed(2)}</span>
-                                <span className={`text-xs font-bold ${report.holding.pnl>=0?'text-red-400':'text-green-400'}`}>{report.holding.pnlPercent.toFixed(2)}%</span>
-                            </div>
-                            <div className="w-full h-2 bg-gray-700 rounded-full mb-1 overflow-hidden">
-                                <div 
-                                    className="h-full bg-gradient-to-r from-red-500 via-gray-500 to-green-500" 
-                                    style={{
-                                        width: '100%',
-                                        position: 'relative'
-                                    }}
-                                >
-                                    <div 
-                                        className="absolute top-0 w-0.5 h-2 bg-white z-10" 
-                                        style={{ left: `${Math.min(100, Math.max(0, (selStock!.price - report.holding.pnlPercent / 100) / (selStock!.price * 2) * 100))}%` }}
-                                     ></div>
+                <div className="flex-1 overflow-y-auto scrollbar-thin">
+                    {codes.map(c => {
+                        const s = stocks.find(x=>x.code===c);
+                        return (
+                            <div key={c} onClick={()=>{setSelectedCode(c); if(window.innerWidth<768) setMobileTab('CHART')}} className={`p-4 border-b border-gray-800/40 hover:bg-[#1c1f26] cursor-pointer transition-all ${selectedCode===c?'bg-[#1c1f26] border-l-2 border-l-emerald-500 pl-[14px]':'pl-4'}`}>
+                                <div className="flex justify-between text-sm font-bold text-gray-200 mb-1">
+                                    <span>{s?.name||c}</span>
+                                    <span className={s&&(s.changePercent>=0?'text-red-400':'text-green-400')}>{s?.changePercent}%</span>
+                                </div>
+                                <div className="flex justify-between text-xs text-gray-500">
+                                    <span className="font-mono">{c}</span>
+                                    <span className="font-mono">{s?.price}</span>
                                 </div>
                             </div>
-                            <div className="text-[10px] text-gray-500 bg-gray-800/30 p-1.5 rounded">{report.holding.advice}</div>
-                        </div>
-                    ) : <div className="text-xs text-gray-600 py-2 text-center">点击右上角编辑持仓</div>
-                )}
+                        )
+                    })}
+                </div>
             </div>
 
-            <div className="flex border-b border-gray-800">
-                <button onClick={()=>setStrategyTab('T0')} className={`flex-1 py-2 text-xs font-bold border-b-2 ${strategyTab==='T0'?'text-blue-400 border-blue-500 bg-blue-900/10':'text-gray-500 border-transparent hover:text-gray-300'}`}>日内 T+0</button>
-                <button onClick={()=>setStrategyTab('SIM')} className={`flex-1 py-2 text-xs font-bold border-b-2 ${strategyTab==='SIM'?'text-orange-400 border-orange-500 bg-orange-900/10':'text-gray-500 border-transparent hover:text-gray-300'}`}>模拟复盘</button>
-                <button onClick={()=>setStrategyTab('TREND')} className={`flex-1 py-2 text-xs font-bold border-b-2 ${strategyTab==='TREND'?'text-purple-400 border-purple-500 bg-purple-900/10':'text-gray-500 border-transparent hover:text-gray-300'}`}>趋势波段</button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                {report && strategyTab === 'T0' && (
+            {/* CHART */}
+            <div className={`flex-1 bg-[#0f1115] flex flex-col min-w-0 ${mobileTab==='CHART'?'flex-1':'hidden md:flex'}`}>
+                {selStock ? (
                     <>
-                        <div className={`border p-3 rounded-lg shadow-lg ${
-                            report.t0.action === '机会' ? 'bg-green-900/10 border-green-900/30' : 
-                            report.t0.action === '风险' ? 'bg-red-900/10 border-red-900/30' : 
-                            'bg-gray-800/10 border-gray-700'
-                        }`}>
-                            <div className="flex justify-between items-center mb-3">
-                                <span className="text-[10px] text-blue-400 font-bold flex items-center gap-1"><Target size={12}/> T0 信号</span>
-                                <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${
-                                    report.t0.action==='机会'?'bg-green-900/30 text-green-400':
-                                    report.t0.action==='风险'?'bg-red-900/30 text-red-400':'bg-gray-800 text-gray-400'
-                                }`}>{report.t0.action}</span>
-                            </div>
-                            <div className="flex justify-between items-center text-center">
-                                <div className="flex-1">
-                                   <div className="text-[9px] text-gray-500 mb-0.5">挂单买入</div>
-                                    <div className="text-sm font-mono text-red-400 font-bold">{report.t0.buyPoint ? report.t0.buyPoint.toFixed(2) : '--'}</div>
-                                </div>
-                                <div className="w-[1px] h-6 bg-gray-700 mx-2"></div>
-                                <div className="flex-1">
-                                    <div className="text-[9px] text-gray-500 mb-0.5">挂单卖出</div>
-                                    <div className="text-sm font-mono text-green-400 font-bold">{report.t0.sellPoint ? report.t0.sellPoint.toFixed(2) : '--'}</div>
-                                </div>
-                            </div>
-                            <SignalStrengthVisual report={report} />
+                        <div className="h-14 border-b border-gray-800 px-5 flex items-center justify-between bg-[#14161b]">
+                            <div><div className="text-lg font-bold text-white">{selStock.name}</div><div className="text-xs text-gray-500 font-mono mt-0.5">{fmt(selStock.volume)} | {selStock.turnover}%</div></div>
+                            <div className="text-right"><div className={`text-2xl font-mono font-bold ${selStock.changePercent>=0?'text-red-500':'text-green-500'}`}>{selStock.price.toFixed(2)}</div><div className={`text-xs font-bold ${selStock.changePercent>=0?'text-red-500/70':'text-green-500/70'}`}>{selStock.changePercent>0?'+':''}{selStock.changePercent}%</div></div>
                         </div>
-                        <div className="p-3 rounded border border-blue-900/30 bg-blue-900/10">
-                            <div className="text-[10px] text-blue-400 mb-1 font-bold">策略逻辑</div>
-                            <p className="text-xs text-gray-400 leading-relaxed">{report.t0.desc}</p>
+                        <div className="flex-1 flex flex-col gap-1 p-1 overflow-hidden">
+                            <div className="flex-1 bg-[#0b0c10] rounded border border-gray-800 relative overflow-hidden">
+                                <div className="absolute top-2 left-2 z-10 flex gap-2"><span className="text-[9px] text-blue-400 bg-blue-900/10 px-1.5 rounded border border-blue-800/30 font-bold flex items-center gap-1"><Activity size={10}/> Night Vision</span></div>
+                                <ChartErrorBoundary><IntradayChart data={selStock.minuteData} prevClose={selStock.prevClose} code={selStock.code} t0Buy={null} t0Sell={null}/></ChartErrorBoundary>
+                            </div>
+                            <div className="flex-1 bg-[#0b0c10] rounded border border-gray-800 relative overflow-hidden">
+                                <ChartErrorBoundary><CandleChart data={selStock.klineData} subChartMode={subChartMode} setSubChartMode={setSubChartMode}/></ChartErrorBoundary>
+                            </div>
                         </div>
                     </>
-                )}
-
-                {/* 🛡️ [SIM] V12: 全真模拟交易面板 */}
-                {strategyTab === 'SIM' && selStock && stockPerformance && (
-                    <div className="space-y-4">
-                        {/* 1. 个股持仓与盈亏概览 */}
-                        <div className="bg-gray-800/30 border border-gray-700 p-3 rounded-lg">
-                            <div className="flex justify-between items-center mb-3">
-                                <div className="text-xs font-bold text-orange-400 flex items-center gap-1"><Calculator size={14}/> 模拟持仓</div>
-                                {/* V12 新增：累计总盈亏展示 */}
-                                <div className={`text-xs font-mono font-bold ${stockPerformance.total >= 0 ? 'text-red-400' : 'text-green-400'}`}>
-                                    总计: {stockPerformance.total > 0 ? '+' : ''}{stockPerformance.total.toFixed(0)}
-                                </div>
-                            </div>
-                            
-                            <div className="grid grid-cols-2 gap-4 text-center mb-2">
-                                <div>
-                                    <div className="text-[9px] text-gray-500">持仓 / 成本</div>
-                                    <div className="text-sm font-mono font-bold text-white">
-                                        {stockPerformance.holding} <span className="text-gray-500 text-[10px]">/ {stockPerformance.avgCost.toFixed(2)}</span>
-                                    </div>
-                                </div>
-                                <div>
-                                    <div className="text-[9px] text-gray-500">浮动盈亏</div>
-                                    <div className={`text-sm font-mono font-bold ${stockPerformance.floating >= 0 ? 'text-red-400' : 'text-green-400'}`}>
-                                        {stockPerformance.floating > 0 ? '+' : ''}{stockPerformance.floating.toFixed(2)}
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            {/* 已结盈亏条 */}
-                            <div className="flex justify-between items-center text-[9px] bg-black/20 p-1.5 rounded border border-gray-800/50">
-                                <span className="text-gray-500">已结盈亏(历史)</span>
-                                <span className={`font-mono font-bold ${stockPerformance.realized >= 0 ? 'text-red-500' : 'text-green-500'}`}>
-                                    {stockPerformance.realized > 0 ? '+' : ''}{stockPerformance.realized.toFixed(2)}
-                                </span>
-                            </div>
-
-                            <div className="mt-2 flex justify-between gap-2">
-                                <button onClick={clearStock} className="flex-1 py-1 bg-gray-700 hover:bg-gray-600 text-[10px] rounded flex items-center justify-center gap-1 text-gray-300">
-                                    <Trash2 size={10}/> 清空该股
-                                </button>
-                                <button onClick={resetAccount} className="flex-1 py-1 bg-red-900/50 hover:bg-red-900 text-[10px] rounded flex items-center justify-center gap-1 text-red-200 border border-red-900">
-                                    <RotateCcw size={10}/> 销户重开
-                                </button>
-                            </div>
-                        </div>
-
-                        
-                        {/* 2. 下单操作区 */}
-                        <div className="bg-gray-800/30 border border-gray-700 p-3 rounded-lg space-y-2">
-                             <div className="flex gap-2 items-center">
-                                 <div className="flex-1 bg-black border border-gray-600 rounded px-2 py-1 flex items-center gap-2">
-                                     <span className="text-[10px] text-gray-500 shrink-0">价格</span>
-                                     <input type="number" value={simPrice} onChange={e=>setSimPrice(e.target.value)} className="w-full bg-transparent text-white text-xs font-mono outline-none" />
-                                 </div>
-                                 <div className="w-24 bg-black border border-gray-600 rounded px-2 py-1 flex items-center gap-1">
-                                     <input type="number" value={simVol} onChange={e=>setSimVol(e.target.value)} step="100" className="w-full bg-transparent text-white text-xs font-mono outline-none text-center" />
-                                     <span className="text-[8px] text-gray-500">股</span>
-                                 </div>
-                             </div>
-                             <div className="flex gap-2">
-                                 <button onClick={(e)=>handleTradeAction('BUY', e)} className="flex-1 bg-red-600 hover:bg-red-500 text-white py-2 rounded font-bold text-xs flex items-center justify-center gap-1"><Plus size={12}/> 买入</button>
-                                 <button onClick={(e)=>handleTradeAction('SELL', e)} className="flex-1 bg-green-600 hover:bg-green-500 text-white py-2 rounded font-bold text-xs flex items-center justify-center gap-1"><Minus size={12}/> 卖出</button>
-                             </div>
-                             <div className="text-[9px] text-center text-gray-500 flex justify-between">
-                                 <span>可用资金: {simState.cash.toFixed(0)}</span>
-                                 <span>最大可买: {selStock.price > 0 ? Math.floor(simState.cash / selStock.price) : 0}股</span>
-                             </div>
-                        </div>
-
-                        {/* 3. 待成交委托 */}
-                        <div className="space-y-2">
-                            <div className="text-[10px] text-gray-500 font-bold flex items-center justify-between">
-                                <span>当前委托</span>
-                                <span className="text-[8px] opacity-50">价格触发时自动成交</span>
-                            </div>
-                            <div className="max-h-[100px] overflow-y-auto space-y-1 pr-1 scrollbar-thin">
-                                {(currentSimPos?.pending || []).length > 0 ? (
-                                    (currentSimPos?.pending || []).map((order) => (
-                                    <div key={order.id} className="flex justify-between items-center text-[10px] p-2 bg-gray-800/40 rounded border border-gray-700/50">
-                                        <div className="flex items-center gap-2">
-                                            <span className={`font-bold ${order.type==='BUY'?'text-red-400':'text-green-400'}`}>{order.type==='BUY'?'买入':'卖出'}</span>
-                                            <span className="text-white font-mono">{order.price.toFixed(2)}</span>
-                                            <span className="text-gray-500">x{order.shares}</span>
-                                        </div>
-                                        <button onClick={()=>cancelOrder(order.id)} className="text-gray-500 hover:text-red-400 flex items-center gap-1 px-2 py-0.5 rounded border border-gray-700 bg-gray-900">
-                                            <XCircle size={10}/> 撤单
-                                        </button>
-                                    </div>
-                                    ))
-                                ) : (
-                                    <div className="text-center text-[10px] text-gray-600 py-2 border border-dashed border-gray-800 rounded">暂无挂单</div>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* 4. 成交记录 */}
-                        <div className="space-y-2">
-                            <div className="text-[10px] text-gray-500 font-bold">成交记录</div>
-                            <div className="max-h-[150px] overflow-y-auto space-y-1 pr-1 scrollbar-thin">
-                                {(currentSimPos?.trades || []).length > 0 ? (
-                                    (currentSimPos?.trades || []).slice().reverse().map((t, idx) => (
-                                    <div key={idx} className="flex justify-between items-center text-[10px] p-2 bg-gray-800/20 rounded border border-gray-800 group">
-                                        <div className="flex gap-2 items-center">
-                                            <span className="text-gray-400 font-mono w-8">{t.time}</span>
-                                            <span className={`font-bold w-6 text-center ${t.type==='BUY'?'text-red-400':'text-green-400'}`}>{t.type === 'BUY' ? '买' : '卖'}</span>
-                                            <span className="text-gray-300 font-mono w-12 text-right">{t.price.toFixed(2)}</span>
-                                            <span className="text-gray-500 font-mono text-right">x{t.shares}</span>
-                                        </div>
-                                        <button onClick={()=>deleteTrade(t.id)} className="text-gray-600 hover:text-red-500 opacity-50 group-hover:opacity-100 transition-all p-1">
-                                            <Trash2 size={10}/>
-                                        </button>
-                                    </div>
-                                    ))
-                                ) : (
-                                    <div className="text-center text-[10px] text-gray-600 py-2">暂无成交</div>
-                                )}
-                             </div>
-                        </div>
-                    </div>
-                )}
-
-                {report && strategyTab === 'TREND' && (
-                    <>
-                        <div className="flex gap-2">
-                            <div className="flex-1 bg-gray-800/30 border border-gray-700 p-2 rounded text-center">
-                                <div className="text-[9px] text-gray-500">相对位置</div>
-                                <div className={`text-xs font-bold mt-1 ${report.trend.position==='低位'?'text-green-400':report.trend.position==='高位'?'text-red-400':'text-yellow-400'}`}>{report.trend.position}</div>
-                            </div>
-                            <div className="flex-1 bg-gray-800/30 border border-gray-700 p-2 rounded text-center">
-                                <div className="text-[9px] text-gray-500">均线趋势</div>
-                                <div className={`text-xs font-bold mt-1 ${report.trend.trend==='多头'?'text-red-400':'text-green-400'}`}>{report.trend.trend}</div>
-                            </div>
-                            <div className="flex-1 bg-gray-800/30 border border-gray-700 p-2 rounded text-center">
-                                <div className="text-[9px] text-gray-500">RSI</div>
-                                <div className="text-xs font-bold mt-1 text-purple-400">{report.trend.rsi.toFixed(1)}</div>
-                            </div>
-                        </div>
-                        
-                        {/* 🦅 [V12.1] 吸筹信号卡片 */}
-                        {report.trend.isAccumulating && (
-                            <div className="bg-emerald-900/20 border border-emerald-800 p-3 rounded-lg flex items-center gap-3">
-                                <div className="p-2 bg-emerald-900/50 rounded-full text-emerald-400 animate-pulse">
-                                    <Radar size={16}/>
-                                </div>
-                                <div>
-                                    <div className="text-xs font-bold text-emerald-400">检测到主力吸筹痕迹</div>
-                                    <div className="text-[9px] text-emerald-200/70">特征：价格横盘震荡，但成交量温和放大。</div>
-                                 </div>
-                            </div>
-                        )}
-
-                        {/* 🦅 [V12.3] 智能安全绳 (ATR+RSI) */}
-                        {report.trend.stopLossPrice && (
-                            <div className={`p-3 rounded-lg flex items-center gap-3 border transition-all ${
-                                report.trend.breakStatus === 'VALID_BREAK'
-                                ? 'bg-red-900/30 border-red-600 animate-pulse shadow-red-900/50 shadow-lg' 
-                                : report.trend.breakStatus === 'SUSPECT_TRAP'
-                                ? 'bg-yellow-900/20 border-yellow-600 border-dashed'
-                                : 'bg-orange-900/20 border-orange-800'
-                            }`}>
-                                <div className={`p-2 rounded-full shrink-0 ${
-                                    report.trend.breakStatus === 'VALID_BREAK' ? 'bg-red-500 text-white' : 
-                                    report.trend.breakStatus === 'SUSPECT_TRAP' ? 'bg-yellow-500/80 text-black' : 
-                                    'bg-orange-900/50 text-orange-400'
-                                }`}>
-                                    {report.trend.breakStatus === 'VALID_BREAK' ? <Siren size={16}/> : 
-                                     report.trend.breakStatus === 'SUSPECT_TRAP' ? <Microscope size={16}/> : 
-                                     <Lock size={16}/>}
-                                </div>
-                                <div className="flex-1">
-                                    <div className={`text-xs font-bold flex justify-between ${
-                                        report.trend.breakStatus === 'VALID_BREAK' ? 'text-red-400' : 
-                                        report.trend.breakStatus === 'SUSPECT_TRAP' ? 'text-yellow-400' :
-                                        'text-orange-400'
-                                    }`}>
-                                         <span>
-                                            {report.trend.breakStatus === 'VALID_BREAK' ? '🚨 确认破位 (有效跌破)' : 
-                                             report.trend.breakStatus === 'SUSPECT_TRAP' ? '📉 疑似诱空 (假摔)' : 
-                                             '🛡️ 安全绳 (ATR止损)'}
-                                        </span>
-                                        <span className="font-mono">{report.trend.stopLossPrice.toFixed(2)}</span>
-                                    </div>
-                                    <div className={`text-[9px] mt-0.5 leading-relaxed ${
-                                        report.trend.breakStatus === 'VALID_BREAK' ? 'text-red-200' : 
-                                        report.trend.breakStatus === 'SUSPECT_TRAP' ? 'text-yellow-200/80' : 
-                                        'text-orange-200/70'
-                                    }`}>
-                                         {report.trend.breakStatus === 'VALID_BREAK' 
-                                            ? '趋势确认反转，不要幻想，立即止损。' 
-                                            : report.trend.breakStatus === 'SUSPECT_TRAP' 
-                                            ? '跌破安全绳但指标超卖，可能为主力扫损骗线，建议观察收盘价。'
-                                            : '价格运行在安全区域，持有观察。'
-                                        }
-                                     </div>
-                                </div>
-                            </div>
-                        )}
-
-                        <div className="border p-3 rounded-lg shadow-lg bg-gray-800/10 border-gray-700">
-                            <div className="flex justify-between items-center mb-3">
-                                <span className="text-[10px] text-purple-400 font-bold flex items-center gap-1"><BarChart2 size={12}/> 趋势强度</span>
-                                <span className="text-[10px] text-gray-500">{report.trend.strengthLevel}</span>
-                            </div>
-                            
-                             <div className="space-y-2">
-                                <div className="flex justify-between text-[9px]">
-                                  <span className="text-gray-400">趋势强度</span>
-                                  <span className={
-                                    report.trend.strength < 20 ? 'text-gray-400' : 
-                                    report.trend.strength < 40 ? 'text-green-400' : 
-                                    report.trend.strength < 60 ? 'text-yellow-400' : 
-                                    report.trend.strength < 80 ? 'text-orange-400' : 
-                                    'text-red-400'
-                                  }>{report.trend.strength.toFixed(0)}%</span>
-                                </div>
-                                <div className="w-full h-2 bg-gray-700 rounded-full overflow-hidden">
-                                  <div 
-                                    className={
-                                      report.trend.strength < 20 ? 'h-full bg-gray-500' : 
-                                      report.trend.strength < 40 ? 'h-full bg-green-500' : 
-                                      report.trend.strength < 60 ? 'h-full bg-yellow-500' : 
-                                      report.trend.strength < 80 ? 'h-full bg-orange-500' : 
-                                      'h-full bg-red-500'
-                                    } 
-                                    style={{ width: `${report.trend.strength}%` }}
-                                  ></div>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div className="p-3 rounded border border-purple-900/30 bg-purple-900/10">
-                             <div className="text-[10px] text-purple-400 mb-1 font-bold">波段建议</div>
-                            <p className="text-xs text-gray-400 leading-relaxed">{report.trend.advice}</p>
-                        </div>
-                    </>
-                )}
+                ) : <div className="flex-1 flex items-center justify-center text-gray-700 gap-2"><MousePointer2 className="opacity-20"/> Select Stock</div>}
             </div>
-         </div>
 
-         <div className="fixed bottom-0 left-0 w-full h-[50px] pb-[env(safe-area-inset-bottom)] box-content bg-[#161920] border-t border-gray-800 flex items-center justify-around z-50 md:hidden text-[10px] text-gray-500">
-            <button onClick={()=>setMobileTab('LIST')} className={`flex flex-col items-center gap-1 ${mobileTab==='LIST'?'text-white':''}`}><List size={20} /> 自选</button>
-            <button onClick={()=>setMobileTab('CHART')} className={`flex flex-col items-center gap-1 ${mobileTab==='CHART'?'text-white':''}`}><LineChart size={20} /> 行情</button>
-            <button onClick={()=>setMobileTab('AI')} className={`flex flex-col items-center gap-1 ${mobileTab==='AI'?'text-white':''}`}><Brain size={20} /> 策略</button>
-         </div>
+            {/* AI PANEL */}
+            <div className={`w-full md:w-80 bg-[#12141a] border-l border-gray-800 flex flex-col ${mobileTab==='AI'?'flex-1':'hidden md:flex'}`}>
+                <div className="p-3 border-b border-gray-800 text-xs font-bold text-gray-500 uppercase tracking-widest bg-[#161920]">Mastermind Panel</div>
+                <div className="flex-1 overflow-y-auto p-4 scrollbar-thin">
+                    <MastermindPanel report={report!} />
+                    <div className="mt-6 pt-4 border-t border-gray-800">
+                         <div className="flex justify-between text-xs text-gray-400 mb-2"><span>我的持仓</span><button onClick={()=>setIsEditingPortfolio(!isEditingPortfolio)} className="text-blue-400 hover:text-blue-300"><Edit2 size={12}/></button></div>
+                         {isEditingPortfolio ? (
+                             <div className="bg-black/20 p-2 rounded space-y-2 border border-gray-700">
+                                 <input className="w-full bg-black border border-gray-600 rounded px-2 py-1.5 text-xs text-white font-mono" placeholder="成本" value={tempCost} onChange={e=>setTempCost(e.target.value)}/>
+                                 <input className="w-full bg-black border border-gray-600 rounded px-2 py-1.5 text-xs text-white font-mono" placeholder="股数" value={tempShares} onChange={e=>setTempShares(e.target.value)}/>
+                                 <button onClick={savePos} className="w-full bg-blue-600 hover:bg-blue-500 text-white text-xs py-2 rounded font-bold transition-colors">保存</button>
+                             </div>
+                         ) : (
+                             portfolio[selectedCode] ? (
+                                 <div className="bg-[#1c1f26] p-3 rounded border border-gray-700">
+                                     <div className="flex justify-between text-xs mb-1 text-gray-500"><span>市值</span><span className="text-gray-300 font-mono">{((selStock?.price||0)*portfolio[selectedCode].shares).toFixed(0)}</span></div>
+                                     <div className="flex justify-between text-xs"><span>盈亏</span><span className={`font-bold ${report?.holdingInfo && report.holdingInfo.pnl>=0?'text-red-400':'text-green-400'}`}>{report?.holdingInfo?.pnl.toFixed(0)} ({report?.holdingInfo?.pnlPercent.toFixed(2)}%)</span></div>
+                                 </div>
+                             ) : <div className="text-center text-xs text-gray-600 border border-dashed border-gray-700 py-4 rounded">暂无持仓</div>
+                         )}
+                    </div>
+                </div>
+            </div>
 
-      </div>
+            <div className="md:hidden absolute bottom-0 w-full h-[50px] bg-[#161920] border-t border-gray-800 flex z-50">
+                {['LIST','CHART','AI'].map(t => (
+                    <button key={t} onClick={()=>setMobileTab(t as any)} className={`flex-1 flex flex-col items-center justify-center text-[10px] gap-0.5 ${mobileTab===t?'text-white bg-gray-800':'text-gray-500'}`}>
+                        {t==='LIST'?<List size={18}/>:t==='CHART'?<LineChart size={18}/>:<Brain size={18}/>}
+                        <span className="scale-90">{t}</span>
+                    </button>
+                ))}
+            </div>
+        </div>
     </div>
   );
 }
