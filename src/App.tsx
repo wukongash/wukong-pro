@@ -1,17 +1,18 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Activity, Zap, Brain, TrendingUp, BarChart2, Clock, Plus, Trash2, Shield, Search, MousePointer2, List, LineChart, Share2, Check, ArrowUp, ArrowDown, ArrowUpDown, Wand2, AlertCircle, WifiOff, Moon, Target, TrendingDown, DollarSign, Crosshair, Anchor, Wallet, Edit2, Save, User, Link as LinkIcon, Copy, Upload, Minus, Info, Lightbulb, PlayCircle, PauseCircle, RotateCcw, Calculator, Coins, XCircle, RefreshCw, CircleDollarSign, Settings, Radar, ShieldAlert, Lock, Siren, Microscope, Filter, BookOpen, X } from 'lucide-react';
+import { Activity, Brain, TrendingUp, BarChart2, Clock, Plus, Trash2, Shield, Search, MousePointer2, List, LineChart, ArrowUp, ArrowDown, ArrowUpDown, Wand2, WifiOff, Moon, Target, Wallet, Edit2, Save, User, Link as LinkIcon, Upload, Minus, RotateCcw, Calculator, XCircle, CircleDollarSign, Settings, Radar, Lock, Siren, Microscope, BookOpen, X } from 'lucide-react';
 
 // 1. 存储配置
 const CODES_KEY = 'WUKONG_CODES_V1';
 const PORTFOLIO_KEY = 'WUKONG_PORTFOLIO_V1';
-const SIMULATION_KEY = 'WUKONG_SIM_V12_PRO'; 
+const SIMULATION_KEY = 'WUKONG_SIM_V12_PRO';
 const DEFAULT_CODES = ['hk00700', 'sh600519', 'usNVDA', 'sz000001'];
 
 // --- 类型定义 ---
 interface MinutePoint { p: number; v: number; t?: string; }
 interface PortfolioItem { cost: number; shares: number; }
 interface RealStock {
-  id: string; code: string; name: string; price: number; changePercent: number;
+  id: string; code: string; name: string; price: number;
+  changePercent: number;
   open: number; prevClose: number; high: number; low: number; volume: number;
   amount: number; turnover: number; pe: number; mktCap: number;
   minuteData: MinutePoint[]; 
@@ -26,7 +27,7 @@ interface SimTrade {
   price: number;
   shares: number;
   type: 'BUY' | 'SELL';
-  amount: number; 
+  amount: number;
 }
 
 interface PendingOrder {
@@ -46,7 +47,7 @@ interface SimPosition {
 }
 
 interface GlobalSimState {
-  cash: number;           
+  cash: number;
   initialCapital: number; 
   positions: Record<string, SimPosition>; 
 }
@@ -88,7 +89,8 @@ const TechIndicators = {
     const result: (number | null)[] = [];
     for (let i = 0; i < data.length; i++) {
       if (i < period - 1) { result.push(null); continue; }
-      let sum = 0; for (let j = 0; j < period; j++) sum += data[i - j].close;
+      let sum = 0;
+      for (let j = 0; j < period; j++) sum += data[i - j].close;
       result.push(sum / period);
     }
     return result;
@@ -146,7 +148,8 @@ const TechIndicators = {
     if (!data || data.length < period) return [];
     const trs: number[] = [];
     for (let i = 0; i < data.length; i++) {
-        if (i === 0) { trs.push(data[i].high - data[i].low); } 
+        if (i === 0) { trs.push(data[i].high - data[i].low);
+        } 
         else {
             const h = data[i].high;
             const l = data[i].low;
@@ -160,13 +163,15 @@ const TechIndicators = {
     for (let i = 0; i < data.length; i++) {
         sumTR += trs[i];
         if (i >= period) sumTR -= trs[i - period];
-        if (i >= period - 1) { atrs[i] = sumTR / period; }
+        if (i >= period - 1) { atrs[i] = sumTR / period;
+        }
     }
     const exits: (number | null)[] = new Array(data.length).fill(null);
     for (let i = period - 1; i < data.length; i++) {
         if (atrs[i] === null) continue;
         let highestHigh = 0;
-        for (let j = 0; j < period; j++) { if (i - j >= 0 && data[i-j].high > highestHigh) highestHigh = data[i-j].high; }
+        for (let j = 0; j < period; j++) { if (i - j >= 0 && data[i-j].high > highestHigh) highestHigh = data[i-j].high;
+        }
         exits[i] = highestHigh - (atrs[i]! * multiplier);
     }
     return exits;
@@ -192,7 +197,6 @@ const QuoteItem = ({ label, val, color = "text-gray-300" }: { label: string, val
     <span className={`text-xs md:text-sm font-mono font-medium ${color}`}>{val}</span>
   </div>
 );
-
 // --- 实战手册组件 [V12.4 新增] ---
 const TacticalManual = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) => {
     if (!isOpen) return null;
@@ -201,7 +205,7 @@ const TacticalManual = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => v
             <div className="bg-[#12141a] border border-gray-700 w-full max-w-2xl h-[80vh] flex flex-col rounded-xl shadow-2xl overflow-hidden" onClick={e=>e.stopPropagation()}>
                 <div className="p-4 border-b border-gray-800 flex justify-between items-center bg-[#161920]">
                     <div className="flex items-center gap-2">
-                        <BookOpen size={18} className="text-blue-400"/>
+                         <BookOpen size={18} className="text-blue-400"/>
                         <span className="font-bold text-gray-200">实战作战手册 (Operation Manual)</span>
                     </div>
                     <button onClick={onClose} className="text-gray-500 hover:text-white"><X size={18}/></button>
@@ -210,26 +214,26 @@ const TacticalManual = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => v
                     
                     {/* Chapter 1 */}
                     <section>
-                        <h3 className="text-purple-400 font-bold mb-3 flex items-center gap-2 text-lg"><Shield size={18}/> 第一章：夜视仪系统 (Night Vision)</h3>
+                         <h3 className="text-purple-400 font-bold mb-3 flex items-center gap-2 text-lg"><Shield size={18}/> 第一章：夜视仪系统 (Night Vision)</h3>
                         <div className="bg-purple-900/10 border border-purple-900/30 p-4 rounded-lg space-y-4">
                             <div>
-                                <strong className="text-purple-300">1. 🟣 紫色虚线：VWAP (机构成本线)</strong>
+                                 <strong className="text-purple-300">1. 🟣 紫色虚线：VWAP (机构成本线)</strong>
                                 <ul className="list-disc pl-5 mt-1 text-gray-400 space-y-1">
                                     <li><strong>定义：</strong> 当日进场机构的平均持仓成本。</li>
-                                    <li><strong>作战心法：</strong> 
+                                     <li><strong>作战心法：</strong> 
                                         <br/>股价 {'>'} VWAP：<strong>强势区</strong>，只做多。
                                         <br/>股价 {'<'} VWAP：<strong>弱势区</strong>，只做空或观望。
-                                    </li>
+                                     </li>
                                 </ul>
                             </div>
-                            <div>
+                             <div>
                                 <strong className="text-yellow-500">2. 🟨 金色量柱：主力大单 (Whale Alert)</strong>
                                 <ul className="list-disc pl-5 mt-1 text-gray-400 space-y-1">
                                     <li><strong>低位金柱 + 股价滞涨：</strong> 悄悄吸货（建仓）。</li>
                                     <li><strong>高位金柱 + 股价跳水：</strong> 暴力出货（快跑）。</li>
                                     <li><strong>拉升金柱 + 突破压力：</strong> 冲锋号角（跟随）。</li>
                                 </ul>
-                            </div>
+                             </div>
                         </div>
                     </section>
 
@@ -238,10 +242,10 @@ const TacticalManual = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => v
                         <h3 className="text-emerald-400 font-bold mb-3 flex items-center gap-2 text-lg"><Radar size={18}/> 第二章：雷达系统 (The Radar)</h3>
                         <div className="bg-emerald-900/10 border border-emerald-900/30 p-4 rounded-lg space-y-4">
                             <div>
-                                <strong className="text-emerald-400">1. 🧲 “吸筹”标签 (Accumulation)</strong>
+                                 <strong className="text-emerald-400">1. 🧲 “吸筹”标签 (Accumulation)</strong>
                                 <p className="text-gray-400 mt-1">如果你看到列表里某只股票带上了 🧲，说明有人在“压着价格买”。</p>
                                 <p className="text-gray-300 font-bold mt-1">🚨 操作指令：不要立刻买入！加入自选，等待一根大阳线突破时果断跟进。</p>
-                            </div>
+                             </div>
                             <div>
                                 <strong className="text-blue-400">2. 短线精灵 (Genie)</strong>
                                 <div className="grid grid-cols-3 gap-2 mt-2 text-xs text-center">
@@ -254,7 +258,7 @@ const TacticalManual = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => v
                     </section>
 
                     {/* Chapter 3 */}
-                    <section>
+                     <section>
                         <h3 className="text-orange-400 font-bold mb-3 flex items-center gap-2 text-lg"><Lock size={18}/> 第三章：安全绳系统 (Safety Rope)</h3>
                         <div className="bg-orange-900/10 border border-orange-900/30 p-4 rounded-lg space-y-4">
                             <div>
@@ -262,20 +266,20 @@ const TacticalManual = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => v
                                 <p className="text-gray-400 mt-1">这根线挂在近期最高价下方。股价涨它跟着涨；股价跌它不动。这是你的<strong>保命底线</strong>。</p>
                             </div>
                             <div>
-                                <strong>2. 三色防御状态 (策略面板)</strong>
+                                 <strong>2. 三色防御状态 (策略面板)</strong>
                                 <ul className="list-none pl-0 mt-2 space-y-2">
                                     <li className="flex gap-2">
                                         <span className="text-orange-400 font-bold whitespace-nowrap">🛡️ 安全状态:</span>
                                         <span className="text-gray-400">股价在橙线之上。<strong>安心持股</strong>。</span>
                                     </li>
-                                    <li className="flex gap-2">
+                                     <li className="flex gap-2">
                                         <span className="text-red-400 font-bold whitespace-nowrap">🚨 确认破位:</span>
                                         <span className="text-gray-400">跌破安全绳 且 RSI{'>'}35。趋势反转，<strong>无脑离场</strong>。</span>
                                     </li>
                                     <li className="flex gap-2">
                                         <span className="text-yellow-400 font-bold whitespace-nowrap">📉 疑似诱空:</span>
                                         <span className="text-gray-400">跌破但 RSI{'<'}35 (超卖)。可能是假摔。<strong>观察成交量，收盘不回则卖。</strong></span>
-                                    </li>
+                                     </li>
                                 </ul>
                             </div>
                         </div>
@@ -292,13 +296,11 @@ const TacticalManual = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => v
     );
 };
 
-const SignalStrengthVisual = ({ stock, report }: { stock: RealStock; report: StrategyReport }) => {
-  if (!report || !report.t0) return null; 
-  
+const SignalStrengthVisual = ({ report }: { report: StrategyReport }) => {
+  if (!report || !report.t0) return null;
   const strengthVal = safeNum(report.t0.strength, 0);
   const confidenceVal = safeNum(report.t0.confidence, 0);
   const executionVal = safeNum(report.t0.executionScore, 0);
-
   const getStrengthLevel = (value: number): { label: string; color: string } => {
     if (value < 20) return { label: '极弱', color: 'bg-gray-500' };
     if (value < 40) return { label: '较弱', color: 'bg-green-500' };
@@ -306,12 +308,10 @@ const SignalStrengthVisual = ({ stock, report }: { stock: RealStock; report: Str
     if (value < 80) return { label: '较强', color: 'bg-orange-500' };
     return { label: '很强', color: 'bg-red-500' };
   };
-
   const strengthLevel = getStrengthLevel(strengthVal);
   const confidenceLevel = getStrengthLevel(confidenceVal);
   const executionLevel = getStrengthLevel(executionVal);
   const compositeScore = (strengthVal * 0.4 + confidenceVal * 0.35 + executionVal * 0.25).toFixed(0);
-
   return (
     <div className="space-y-3">
       <div className="text-[10px] text-gray-500 font-bold">信号分析</div>
@@ -365,7 +365,7 @@ const IntradayChart = React.memo(({ data = [], prevClose, code, t0Buy, t0Sell }:
   }, [data, prevClose]);
 
   const avgLine = useMemo(() => {
-      if (validData.length === 0) return [];
+    if (validData.length === 0) return [];
       let sumP = 0;
       return validData.map((d, i) => { sumP += d.p; return sumP / (i + 1); });
   }, [validData]);
@@ -380,7 +380,7 @@ const IntradayChart = React.memo(({ data = [], prevClose, code, t0Buy, t0Sell }:
     }
     return totalV > 0 ? totalPV / totalV : prevClose;
   }, [validData, prevClose]);
-
+  
   const volStats = useMemo(() => {
     if (validData.length === 0) return { maxVol: 1, threshold: 999999 };
     let max = 0;
@@ -402,7 +402,7 @@ const IntradayChart = React.memo(({ data = [], prevClose, code, t0Buy, t0Sell }:
              <div className="text-xs font-bold text-gray-500">{code.startsWith('us') ? '美股盘前/休市' : '等待开盘'}</div>
            </div>
         </div>
-     );
+    );
   }
 
   let MAX_POINTS = 241; 
@@ -410,7 +410,6 @@ const IntradayChart = React.memo(({ data = [], prevClose, code, t0Buy, t0Sell }:
   if (code.substring(0, 2) === 'hk') MAX_POINTS = 330;
 
   const effectivePrev = prevClose > 0 ? prevClose : validData[0].p;
-  
   const prices = validData.map(d => d.p);
   const maxPrice = Math.max(...prices);
   const minPrice = Math.min(...prices);
@@ -426,14 +425,12 @@ const IntradayChart = React.memo(({ data = [], prevClose, code, t0Buy, t0Sell }:
     const y = 100 - ((d.p - bottom) / range) * 100;
     return `${x},${y}`;
   }).join(' ');
-
   const avgPoints = avgLine.map((p, i) => {
     const safeIndex = Math.min(i, MAX_POINTS - 1);
     const x = (safeIndex / (MAX_POINTS - 1)) * 100;
     const y = 100 - ((p - bottom) / range) * 100;
     return `${x},${y}`;
   }).join(' ');
-
   const vwapY = 100 - ((vwap - bottom) / range) * 100;
 
   const lastPoint = validData[validData.length - 1];
@@ -451,7 +448,6 @@ const IntradayChart = React.memo(({ data = [], prevClose, code, t0Buy, t0Sell }:
   };
 
   const hoverData = hoverIdx !== null ? validData[hoverIdx] : null;
-
   return (
     <div className="w-full h-full flex flex-col bg-[#0b0c10] select-none group relative"
          style={{ touchAction: 'none' }} 
@@ -478,7 +474,7 @@ const IntradayChart = React.memo(({ data = [], prevClose, code, t0Buy, t0Sell }:
        <div className="relative h-[70%] border-b border-gray-800/80 box-border">
           <svg className="w-full h-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
              <defs>
-               <linearGradient id={`grad-${isUp?'up':'down'}`} x1="0" y1="0" x2="0" y2="1">
+                <linearGradient id={`grad-${isUp?'up':'down'}`} x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor={areaColor} stopOpacity="0.15"/>
                   <stop offset="100%" stopColor={areaColor} stopOpacity="0.0"/>
                </linearGradient>
@@ -537,14 +533,13 @@ const CandleChart = React.memo(({ data = [], subChartMode, setSubChartMode }: { 
     const result: (number|null)[] = [];
     for(let k=0; k<6; k++) result.push(null);
     for (let i = 6; i < validData.length; i++) {
-      const slice = validData.slice(0, i + 1); 
+      const slice = validData.slice(0, i + 1);
       result.push(TechIndicators.calculateRSI(slice));
     }
     return result;
   }, [validData]);
 
   if (validData.length === 0) return <div className="h-full flex items-center justify-center text-gray-700 text-xs">无K线数据</div>;
-
   const displayCount = 60;
   const safeStart = Math.max(0, validData.length - displayCount);
   const displayData = validData.slice(safeStart);
@@ -562,7 +557,6 @@ const CandleChart = React.memo(({ data = [], subChartMode, setSubChartMode }: { 
   let max = 0, min = Infinity;
   displayData.forEach(d => { max = Math.max(max, d.high); min = Math.min(min, d.low); });
   [...displayMA5, ...displayMA10, ...displayMA20, ...displaySafeRope].forEach(v => { if (v) { max = Math.max(max, v); min = Math.min(min, v); }});
-
   const range = max - min;
   const renderMax = max + (range * 0.05);
   const renderMin = min - (range * 0.05);
@@ -570,7 +564,8 @@ const CandleChart = React.memo(({ data = [], subChartMode, setSubChartMode }: { 
   const barWidth = 100 / displayCount;
   const gap = barWidth * 0.25;
 
-  let maxVol = 0; displayData.forEach(d => maxVol = Math.max(maxVol, d.vol));
+  let maxVol = 0;
+  displayData.forEach(d => maxVol = Math.max(maxVol, d.vol));
   let maxMACD = 0, minMACD = 0;
   [...displayDIF, ...displayDEA, ...displayMACDBar].forEach(v => { maxMACD = Math.max(maxMACD, v); minMACD = Math.min(minMACD, v); });
   const absMaxMACD = Math.max(Math.abs(maxMACD), Math.abs(minMACD));
@@ -593,7 +588,6 @@ const CandleChart = React.memo(({ data = [], subChartMode, setSubChartMode }: { 
   };
 
   const activeData = hoverIdx !== null ? displayData[hoverIdx] : null;
-
   return (
     <div className="w-full h-full relative bg-[#0b0c10] select-none border-t border-gray-800/50 flex flex-col group"
          style={{ touchAction: 'none' }} 
@@ -616,7 +610,7 @@ const CandleChart = React.memo(({ data = [], subChartMode, setSubChartMode }: { 
            <div className="absolute top-8 left-2 z-20 bg-[#1c1f26]/90 border border-gray-700 px-2 py-1 rounded text-[9px] font-mono shadow-lg pointer-events-none">
                <div className="text-gray-400 mb-0.5">{activeData.date}</div>
                <div className="flex gap-2">
-                 <span className={activeData.close>activeData.open?'text-red-400':'text-green-400'}>C: {activeData.close.toFixed(2)}</span>
+                  <span className={activeData.close>activeData.open?'text-red-400':'text-green-400'}>C: {activeData.close.toFixed(2)}</span>
                </div>
            </div>
        )}
@@ -700,7 +694,6 @@ export default function App() {
       return JSON.parse(localStorage.getItem(CODES_KEY) || 'null') || DEFAULT_CODES;
     } catch { return DEFAULT_CODES; }
   });
-
   const [portfolio, setPortfolio] = useState<Record<string, PortfolioItem>>(() => {
     try { 
       const searchParams = new URLSearchParams(window.location.search);
@@ -714,7 +707,6 @@ export default function App() {
       return JSON.parse(localStorage.getItem(PORTFOLIO_KEY) || '{}'); 
     } catch { return {}; }
   });
-  
   const [simState, setSimState] = useState<GlobalSimState>(() => {
     try {
         const stored = localStorage.getItem(SIMULATION_KEY);
@@ -727,19 +719,18 @@ export default function App() {
                    if (typeof parsed.positions[k].realizedPnl !== 'number') parsed.positions[k].realizedPnl = 0;
                 });
                 return parsed;
-            }
+           }
         }
         return { cash: 1000000, initialCapital: 1000000, positions: {} };
     } catch { return { cash: 1000000, initialCapital: 1000000, positions: {} }; }
   });
-  
   const [stocks, setStocks] = useState<RealStock[]>([]);
   const [selectedCode, setSelectedCode] = useState<string>('');
   const [inputCode, setInputCode] = useState('');
   const [draggedCode, setDraggedCode] = useState<string | null>(null);
   const [dragOverCode, setDragOverCode] = useState<string | null>(null);
   const [mobileTab, setMobileTab] = useState<'LIST' | 'CHART' | 'AI'>('CHART');
-  const [copied, setCopied] = useState(false);
+  const [, setCopied] = useState(false);
   const [isSorting, setIsSorting] = useState(false);
   const [isGenieMode, setIsGenieMode] = useState(false);
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
@@ -751,7 +742,7 @@ export default function App() {
   const [subChartMode, setSubChartMode] = useState<'VOL'|'MACD'|'RSI'>('MACD');
   const [simVol, setSimVol] = useState('100'); 
   const [simPrice, setSimPrice] = useState(''); 
-  const [isSettingCapital, setIsSettingCapital] = useState(false); 
+  const [isSettingCapital, setIsSettingCapital] = useState(false);
   const [tempCapital, setTempCapital] = useState('');
   
   // [V12.4] 新增：是否打开说明书
@@ -765,14 +756,12 @@ export default function App() {
   useEffect(() => { localStorage.setItem(SIMULATION_KEY, JSON.stringify(simState)); }, [simState]);
   
   useEffect(() => { if (!selectedCode && codes.length > 0) setSelectedCode(codes[0]); }, [codes, selectedCode]);
-
   useEffect(() => {
       const searchParams = new URLSearchParams(window.location.search);
       if (searchParams.get('sync')) {
           window.history.replaceState({}, '', window.location.pathname);
       }
   }, []);
-
   useEffect(() => {
       if (selectedCode) {
           const p = portfolio[selectedCode];
@@ -783,7 +772,6 @@ export default function App() {
           if (s) setSimPrice(s.price.toFixed(2));
       }
   }, [selectedCode]);
-
   const generateSyncLink = () => {
       const data = { codes, portfolio };
       const str = btoa(JSON.stringify(data));
@@ -793,7 +781,6 @@ export default function App() {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
   };
-
   const savePortfolio = () => {
       if (!selectedCode) return;
       const cost = parseFloat(tempCost);
@@ -810,8 +797,10 @@ export default function App() {
 
   const moveStock = (index: number, direction: 'UP' | 'DOWN') => {
     const newCodes = [...codes];
-    if (direction === 'UP' && index > 0) { [newCodes[index], newCodes[index - 1]] = [newCodes[index - 1], newCodes[index]]; } 
-    else if (direction === 'DOWN' && index < newCodes.length - 1) { [newCodes[index], newCodes[index + 1]] = [newCodes[index + 1]] = [newCodes[index + 1], newCodes[index]]; }
+    if (direction === 'UP' && index > 0) { [newCodes[index], newCodes[index - 1]] = [newCodes[index - 1], newCodes[index]];
+    } 
+    else if (direction === 'DOWN' && index < newCodes.length - 1) { [newCodes[index], newCodes[index + 1]] = [newCodes[index + 1]] = [newCodes[index + 1], newCodes[index]];
+    }
     setCodes(newCodes);
   };
 
@@ -830,7 +819,6 @@ export default function App() {
     }
     setDraggedCode(null); setDragOverCode(null);
   };
-
   const fetchRealData = useCallback(async () => {
     if (codes.length === 0) return;
     const currentId = ++requestIdRef.current;
@@ -864,7 +852,6 @@ export default function App() {
       }).filter(Boolean) as RealStock[]);
     } catch (e) { if ((e as Error).name !== 'AbortError') console.error("API Error", e); }
   }, [codes]);
-
   const fetchMinute = async (code: string) => {
     if (code !== lastSelectedCodeRef.current) return;
     try {
@@ -885,7 +872,8 @@ export default function App() {
             if (!isNaN(p)) minutePoints.push({ p, v: currentVol, t: parts[0] });
         });
         setStocks(p => p.map(s => s.code === code ? { ...s, minuteData: minutePoints } : s));
-      } else { setStocks(p => p.map(s => s.code === code ? { ...s, minuteData: [] } : s)); }
+      } else { setStocks(p => p.map(s => s.code === code ? { ...s, minuteData: [] } : s));
+      }
     } catch(e) {}
   };
 
@@ -906,7 +894,6 @@ export default function App() {
   };
 
   useEffect(() => { fetchRealData(); const i = setInterval(fetchRealData, 3000); return () => clearInterval(i); }, [fetchRealData]);
-  
   useEffect(() => { 
     if (selectedCode) { 
       lastSelectedCodeRef.current = selectedCode;
@@ -915,7 +902,6 @@ export default function App() {
       fetchKLine(selectedCode); 
     } 
   }, [selectedCode]);
-
   const selStock = stocks.find(s => s.code === selectedCode);
 
   const report = useMemo((): StrategyReport | null => {
@@ -942,19 +928,22 @@ export default function App() {
       const dist = Math.abs(s.price - vwap);
       const maxDist = vwap * dynamicBand * 1.5;
       let rawStrength = Math.min(100, (dist / maxDist) * 100);
-      let liquidityScore = Math.min(100, (s.turnover / 3) * 60 + (s.amount / 100000000) * 10); 
+      let liquidityScore = Math.min(100, (s.turnover / 3) * 60 + (s.amount / 100000000) * 10);
       if (liquidityScore < 20) liquidityScore = 20;
       let rsi = 50;
-      if (kdata.length > 6) { rsi = TechIndicators.calculateRSI(kdata); }
+      if (kdata.length > 6) { rsi = TechIndicators.calculateRSI(kdata);
+      }
       let confidence = 50;
-
       if (s.price < dayDn) {
-          t0Action = "机会"; t0Buy = s.price; t0Desc = "股价日内超跌，乖离率过大，存在反抽均线需求，激进者可现价博反弹。";
+          t0Action = "机会"; t0Buy = s.price;
+          t0Desc = "股价日内超跌，乖离率过大，存在反抽均线需求，激进者可现价博反弹。";
           if (rsi < 30) confidence += 30; else if (rsi < 45) confidence += 10;
           confidence += (rawStrength * 0.3);
       } else if (s.price > dayUp) {
-          t0Action = "风险"; t0Sell = s.price; t0Desc = "股价日内超涨，偏离均线过远，谨防冲高回落，建议分批止盈。";
-          if (rsi > 70) confidence += 30; else if (rsi > 55) confidence += 10;
+          t0Action = "风险";
+          t0Sell = s.price; t0Desc = "股价日内超涨，偏离均线过远，谨防冲高回落，建议分批止盈。";
+          if (rsi > 70) confidence += 30;
+          else if (rsi > 55) confidence += 10;
           confidence += (rawStrength * 0.3);
       } else {
           t0Buy = dayDn; t0Sell = dayUp;
@@ -963,7 +952,6 @@ export default function App() {
           confidence = 40 + (liquidityScore * 0.2);
       }
       confidence = Math.min(100, confidence);
-
       let t0StrengthLevel: 'very-weak' | 'weak' | 'moderate' | 'strong' | 'very-strong' = 'moderate';
       if (rawStrength < 20) t0StrengthLevel = 'very-weak';
       else if (rawStrength < 40) t0StrengthLevel = 'weak';
@@ -971,20 +959,21 @@ export default function App() {
       else if (rawStrength < 80) t0StrengthLevel = 'strong';
       else t0StrengthLevel = 'very-strong';
 
-      let trendPos = "中位"; let trendDir = "震荡"; let trendAdvice = "暂无明确方向。";
+      let trendPos = "中位"; let trendDir = "震荡";
+      let trendAdvice = "暂无明确方向。";
       let trendStrength = 0;
       let trendStrengthLevel: 'very-weak' | 'weak' | 'moderate' | 'strong' | 'very-strong' = 'moderate';
       const isAccumulating = TechIndicators.checkAccumulation(kdata);
       let stopLossPrice = null;
       let breakStatus: 'SAFE' | 'VALID_BREAK' | 'SUSPECT_TRAP' = 'SAFE';
-      
       if (kdata.length > 22) {
           const exits = TechIndicators.calculateChandelierExit(kdata, 22, 3.0);
           const currentExit = exits[exits.length - 1]; 
           if (currentExit !== null) {
               stopLossPrice = currentExit;
               if (s.price < currentExit) {
-                  if (rsi < 35) { breakStatus = 'SUSPECT_TRAP'; } else { breakStatus = 'VALID_BREAK'; }
+                  if (rsi < 35) { breakStatus = 'SUSPECT_TRAP';
+                  } else { breakStatus = 'VALID_BREAK'; }
               }
           }
       }
@@ -992,14 +981,18 @@ export default function App() {
       if (kdata.length >= 20) {
           const pos = TechIndicators.calculatePosition(kdata, 20);
           const ma20 = TechIndicators.calculateMA(kdata, 20).pop() || 0;
-          if (pos < 20) trendPos = "低位"; else if (pos > 80) trendPos = "高位";
+          if (pos < 20) trendPos = "低位";
+          else if (pos > 80) trendPos = "高位";
           if (s.price > ma20) trendDir = "多头"; else trendDir = "空头";
           let trendDev = Math.abs((s.price - ma20) / ma20) * 100;
           trendStrength = Math.min(100, trendDev * 10 + (pos > 80 || pos < 20 ? 30 : 0));
           if (trendPos === "低位") { trendAdvice = "股价处于近20日低位区域，下跌空间有限。即使趋势偏弱，也不宜盲目割肉，耐心等待底部企稳信号。"; } 
-          else if (trendPos === "高位" && trendDir === "空头") { trendAdvice = "高位出现破位迹象，头部风险加剧，建议坚决离场规避风险。"; } 
-          else if (trendDir === "多头") { trendAdvice = "趋势维持良好，沿5日线/20日线持股，享受趋势红利。"; } 
-          else { trendAdvice = "目前处于中位震荡区间，缺乏方向感，建议关注箱体突破方向。"; }
+          else if (trendPos === "高位" && trendDir === "空头") { trendAdvice = "高位出现破位迹象，头部风险加剧，建议坚决离场规避风险。";
+          } 
+          else if (trendDir === "多头") { trendAdvice = "趋势维持良好，沿5日线/20日线持股，享受趋势红利。";
+          } 
+          else { trendAdvice = "目前处于中位震荡区间，缺乏方向感，建议关注箱体突破方向。";
+          }
       }
 
       if (trendStrength < 20) trendStrengthLevel = 'very-weak';
@@ -1010,7 +1003,8 @@ export default function App() {
 
       let holdingInfo = null;
       if (myPos) {
-          const marketVal = s.price * myPos.shares; const costVal = myPos.cost * myPos.shares; const pnl = marketVal - costVal; const pnlPercent = costVal > 0 ? (pnl / costVal) * 100 : 0;
+          const marketVal = s.price * myPos.shares;
+          const costVal = myPos.cost * myPos.shares; const pnl = marketVal - costVal; const pnlPercent = costVal > 0 ? (pnl / costVal) * 100 : 0;
           let hAdvice = "";
           if (pnlPercent > 5) hAdvice = "持仓盈利良好，可设置止盈保护线。";
           else if (pnlPercent < -5) {
@@ -1022,21 +1016,20 @@ export default function App() {
 
       return {
           t0: { action: t0Action, buyPoint: t0Buy, sellPoint: t0Sell, desc: t0Desc, strength: rawStrength, strengthLevel: t0StrengthLevel, confidence: confidence, executionScore: liquidityScore },
-          trend: { position: trendPos, trend: trendDir, advice: trendAdvice, rsi, strength: trendStrength, strengthLevel: trendStrengthLevel, isAccumulating, stopLossPrice, breakStatus },
+          trend: { position: trendPos, trend: trendDir, advice: trendAdvice, rsi, strength: trendStrength, strengthLevel: trendStrengthLevel, isAccumulating, stopLossPrice, breakStatus, isBroken: breakStatus !== 'SAFE' },
           holding: holdingInfo
       };
-    } catch (e) { return null; }
   }, [selStock, portfolio]);
-
   const fmt = (n: number) => n > 100000000 ? (n/100000000).toFixed(2)+'亿' : (n/10000).toFixed(2)+'万';
-
   const handleTradeAction = (type: 'BUY' | 'SELL', e?: React.MouseEvent) => {
       if (e) { e.preventDefault(); e.stopPropagation(); } 
-      if (!selectedCode) return;
+      if (!selectedCode || !selStock) return;
       const price = parseFloat(simPrice);
       const vol = parseInt(simVol);
-      if (isNaN(price) || price <= 0 || isNaN(vol) || vol <= 0) { alert('请输入有效的价格和数量'); return; }
-      if (type === 'BUY' && price > selStock.price) { if (!confirm(`⚠️ 警告：您的买入价 ${price} 高于当前价 ${selStock.price}，将可能以较高成本成交。\n\n是否继续？`)) return; }
+      if (isNaN(price) || price <= 0 || isNaN(vol) || vol <= 0) { alert('请输入有效的价格和数量'); return;
+      }
+      if (type === 'BUY' && price > selStock.price) { if (!confirm(`⚠️ 警告：您的买入价 ${price} 高于当前价 ${selStock.price}，将可能以较高成本成交。\n\n是否继续？`)) return;
+      }
       const now = new Date();
       const timeStr = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
       setSimState(prev => {
@@ -1065,17 +1058,22 @@ export default function App() {
             const timeStr = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
             const remainingOrders = newPending.filter(order => {
                 let executed = false;
-                if (order.type === 'BUY' && currentPrice <= order.price) { executed = true; const costBasis = (newHolding * newAvgCost) + (order.price * order.shares); newHolding += order.shares; newAvgCost = newHolding > 0 ? costBasis / newHolding : 0; } 
-                else if (order.type === 'SELL' && currentPrice >= order.price) { executed = true; newCash += order.price * order.shares; const tradePnl = (order.price - newAvgCost) * order.shares; newRealizedPnl += tradePnl; }
-                if (executed) { hasChanges = true; newTrades.push({ id: order.id + '_exec', time: timeStr, price: order.price, shares: order.shares, type: order.type, amount: order.price * order.shares }); return false; }
+                if (order.type === 'BUY' && currentPrice <= order.price) { executed = true; const costBasis = (newHolding * newAvgCost) + (order.price * order.shares);
+                newHolding += order.shares; newAvgCost = newHolding > 0 ? costBasis / newHolding : 0;
+                } 
+                else if (order.type === 'SELL' && currentPrice >= order.price) { executed = true;
+                newCash += order.price * order.shares; const tradePnl = (order.price - newAvgCost) * order.shares; newRealizedPnl += tradePnl;
+                }
+                if (executed) { hasChanges = true;
+                newTrades.push({ id: order.id + '_exec', time: timeStr, price: order.price, shares: order.shares, type: order.type, amount: order.price * order.shares }); return false;
+                }
                 return true;
             });
             if (!hasChanges) return prev;
             return { ...prev, cash: newCash, positions: { ...prev.positions, [selStock.code]: { ...account, holding: newHolding, avgCost: newAvgCost, realizedPnl: newRealizedPnl, trades: newTrades, pending: remainingOrders } } };
-        });
+      });
       } catch(e) { console.error("Matching Engine Error", e); }
-  }, [selStock]); 
-
+  }, [selStock]);
   const cancelOrder = (orderId: string) => {
       if (!selectedCode) return;
       setSimState(prev => {
@@ -1083,7 +1081,8 @@ export default function App() {
           const pendingList = Array.isArray(account.pending) ? account.pending : [];
           const orderToCancel = pendingList.find(o => o.id === orderId); if (!orderToCancel) return prev;
           let newCash = prev.cash; let newHolding = account.holding;
-          if (orderToCancel.type === 'BUY') { newCash += orderToCancel.price * orderToCancel.shares; } else { newHolding += orderToCancel.shares; }
+          if (orderToCancel.type === 'BUY') { newCash += orderToCancel.price * orderToCancel.shares; } else { newHolding += orderToCancel.shares; 
+          }
           return { ...prev, cash: newCash, positions: { ...prev.positions, [selectedCode]: { ...account, holding: newHolding, pending: pendingList.filter(o => o.id !== orderId) } } };
       });
   };
@@ -1104,7 +1103,6 @@ export default function App() {
   };
 
   const resetAccount = () => { if (confirm('确定要【销户重开】吗？\n此操作将清空所有股票持仓和交易记录，资金恢复初始值。')) { setSimState({ cash: 1000000, initialCapital: 1000000, positions: {} }); } };
-
   const clearStock = () => {
       if (!selectedCode) return;
       if (confirm(`确定要清空【${selStock?.name}】的所有记录吗？\n\n注意：这相当于“回滚”操作，该股占用的资金将按【成本价】退回账户。`)) {
@@ -1131,12 +1129,12 @@ export default function App() {
   const totalAssets = useMemo(() => {
       let totalMarketValue = 0;
       Object.keys(simState.positions).forEach(code => {
-          const pos = simState.positions[code]; const stock = stocks.find(s => s.code === code); const currentPrice = stock ? stock.price : pos.avgCost; 
+          const pos = simState.positions[code]; const stock = stocks.find(s => s.code === code); 
+          const currentPrice = stock ? stock.price : pos.avgCost; 
           totalMarketValue += pos.holding * currentPrice;
       });
       return simState.cash + totalMarketValue;
   }, [simState, stocks]);
-  
   const totalPnl = totalAssets - simState.initialCapital;
 
   return (
@@ -1158,7 +1156,7 @@ export default function App() {
 
             {/* 12.4 说明书按钮 */}
             <button onClick={() => setIsManualOpen(true)} className="text-gray-400 hover:text-white flex items-center gap-1 ml-2 transition-colors">
-                <BookOpen size={16}/>
+                 <BookOpen size={16}/>
             </button>
 
             <button onClick={() => setIsSyncModalOpen(true)} className="text-gray-400 hover:text-white flex items-center gap-1 ml-2">
@@ -1233,7 +1231,7 @@ export default function App() {
             {isGenieMode && (
                 <div className="px-3 py-1 bg-purple-900/20 border-b border-purple-900/30 flex items-center gap-2 text-[10px] text-purple-300">
                     <div className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse"/>
-                    正在扫描异动...
+                     正在扫描异动...
                 </div>
             )}
 
@@ -1248,12 +1246,13 @@ export default function App() {
                         onDragStart={(e)=>handleDragStart(e,c)} 
                         onDragOver={(e)=>{e.preventDefault();if(draggedCode!==c)setDragOverCode(c)}} 
                         onDrop={(e)=>handleDrop(e,c)} 
-                        onClick={()=>{ if(!isSorting) { setSelectedCode(c); if(window.innerWidth < 768) setMobileTab('CHART'); } }}
+                        onClick={()=>{ if(!isSorting) { setSelectedCode(c);
+if(window.innerWidth < 768) setMobileTab('CHART'); } }}
                         className={`relative p-3 border-b border-gray-800/50 cursor-pointer hover:bg-[#1c1f26] group ${selectedCode===c && !isSorting ? 'bg-[#1c1f26] border-l-2 border-l-blue-500' : 'border-l-2 border-l-transparent'} ${draggedCode===c?'opacity-30':''} ${isSorting ? 'pr-2' : 'pr-9'}`}>
                      {dragOverCode===c && draggedCode!==c && !isSorting && <div className="absolute top-0 left-0 w-full h-0.5 bg-blue-500 z-20"/>}
                      <div className="flex justify-between items-center mb-1">
                         <div className="flex items-center gap-1 overflow-hidden">
-                           <span className="font-bold text-gray-200 text-xs truncate max-w-[4.5rem]">{s ? s.name : c}</span>
+                          <span className="font-bold text-gray-200 text-xs truncate max-w-[4.5rem]">{s ? s.name : c}</span>
                            {genieSignal && <span className={`text-[9px] px-1 rounded border shrink-0 ${genieSignal.color}`}>{genieSignal.label}</span>}
                         </div>
                         {s && <span className={`text-xs font-bold ${s.changePercent>=0?'text-red-400':'text-green-400'}`}>{s.changePercent}%</span>}
@@ -1261,16 +1260,18 @@ export default function App() {
                      <div className="flex justify-between text-[10px] text-gray-500">
                          <span>{c}</span>
                          {s && !isSorting && (
-                             <div className="flex flex-col items-end">
+                              <div className="flex flex-col items-end">
                                  <span className="font-mono text-gray-300">{s.price.toFixed(2)}</span>
                                  <div className="text-[8px] text-gray-600">
-                                     PE: {s.pe.toFixed(1)} | 换手: {s.turnover}%
+                                      PE: {s.pe.toFixed(1)} | 换手: {s.turnover}%
                                  </div>
                              </div>
-                         )}
+                     )}
                      </div>
                      {!isSorting && (<button onClick={(e)=>{e.stopPropagation();setCodes(codes.filter(x=>x!==c))}} className="absolute right-0 top-0 bottom-0 w-8 flex items-center justify-center text-gray-600 md:opacity-0 md:group-hover:opacity-100 transition-all z-10 border-l border-gray-800 bg-[#1c1f26]/80"><Trash2 size={13}/></button>)}
-                     {isSorting && (<div className="absolute right-1 top-0 bottom-0 flex items-center gap-1"><button onClick={(e) => { e.stopPropagation(); moveStock(index, 'UP'); }} disabled={index === 0} className={`p-1 rounded ${index === 0 ? 'text-gray-700' : 'text-blue-400 bg-blue-900/20'}`}><ArrowUp size={14}/></button><button onClick={(e) => { e.stopPropagation(); moveStock(index, 'DOWN'); }} disabled={index === codes.length - 1} className={`p-1 rounded ${index === codes.length - 1 ? 'text-gray-700' : 'text-blue-400 bg-blue-900/20'}`}><ArrowDown size={14}/></button></div>)}
+                     {isSorting && (<div className="absolute right-1 top-0 bottom-0 flex items-center gap-1"><button onClick={(e) => { e.stopPropagation(); moveStock(index, 'UP');
+}} disabled={index === 0} className={`p-1 rounded ${index === 0 ? 'text-gray-700' : 'text-blue-400 bg-blue-900/20'}`}><ArrowUp size={14}/></button><button onClick={(e) => { e.stopPropagation();
+moveStock(index, 'DOWN'); }} disabled={index === codes.length - 1} className={`p-1 rounded ${index === codes.length - 1 ? 'text-gray-700' : 'text-blue-400 bg-blue-900/20'}`}><ArrowDown size={14}/></button></div>)}
                    </div>
                  )
                })}
@@ -1311,7 +1312,7 @@ export default function App() {
                       <div className="absolute top-2 left-2 z-10 flex items-center gap-2 text-[10px] text-gray-500 pointer-events-none"><BarChart2 size={10}/> 日K线</div>
                       <CandleChart data={selStock.klineData} subChartMode={subChartMode} setSubChartMode={setSubChartMode} />
                    </div>
-                </div>
+               </div>
                 
                 <div className="h-8 bg-[#1a1d24] border-t border-gray-800 flex items-center px-4 text-[10px] text-gray-500">
                   {selStock.code.startsWith('us') && <span className="text-blue-400">⚠️ 美股盘前数据可能失真</span>}
@@ -1358,8 +1359,8 @@ export default function App() {
                                 >
                                     <div 
                                         className="absolute top-0 w-0.5 h-2 bg-white z-10" 
-                                        style={{ left: `${Math.min(100, Math.max(0, (selStock.price - report.holding.pnlPercent / 100) / (selStock.price * 2) * 100))}%` }}
-                                    ></div>
+                                        style={{ left: `${Math.min(100, Math.max(0, (selStock!.price - report.holding.pnlPercent / 100) / (selStock!.price * 2) * 100))}%` }}
+                                     ></div>
                                 </div>
                             </div>
                             <div className="text-[10px] text-gray-500 bg-gray-800/30 p-1.5 rounded">{report.holding.advice}</div>
@@ -1391,7 +1392,7 @@ export default function App() {
                             </div>
                             <div className="flex justify-between items-center text-center">
                                 <div className="flex-1">
-                                    <div className="text-[9px] text-gray-500 mb-0.5">挂单买入</div>
+                                   <div className="text-[9px] text-gray-500 mb-0.5">挂单买入</div>
                                     <div className="text-sm font-mono text-red-400 font-bold">{report.t0.buyPoint ? report.t0.buyPoint.toFixed(2) : '--'}</div>
                                 </div>
                                 <div className="w-[1px] h-6 bg-gray-700 mx-2"></div>
@@ -1400,7 +1401,7 @@ export default function App() {
                                     <div className="text-sm font-mono text-green-400 font-bold">{report.t0.sellPoint ? report.t0.sellPoint.toFixed(2) : '--'}</div>
                                 </div>
                             </div>
-                            <SignalStrengthVisual stock={selStock} report={report} />
+                            <SignalStrengthVisual report={report} />
                         </div>
                         <div className="p-3 rounded border border-blue-900/30 bg-blue-900/10">
                             <div className="text-[10px] text-blue-400 mb-1 font-bold">策略逻辑</div>
@@ -1455,6 +1456,7 @@ export default function App() {
                             </div>
                         </div>
 
+                        
                         {/* 2. 下单操作区 */}
                         <div className="bg-gray-800/30 border border-gray-700 p-3 rounded-lg space-y-2">
                              <div className="flex gap-2 items-center">
@@ -1524,7 +1526,7 @@ export default function App() {
                                 ) : (
                                     <div className="text-center text-[10px] text-gray-600 py-2">暂无成交</div>
                                 )}
-                            </div>
+                             </div>
                         </div>
                     </div>
                 )}
@@ -1555,7 +1557,7 @@ export default function App() {
                                 <div>
                                     <div className="text-xs font-bold text-emerald-400">检测到主力吸筹痕迹</div>
                                     <div className="text-[9px] text-emerald-200/70">特征：价格横盘震荡，但成交量温和放大。</div>
-                                </div>
+                                 </div>
                             </div>
                         )}
 
@@ -1583,7 +1585,7 @@ export default function App() {
                                         report.trend.breakStatus === 'SUSPECT_TRAP' ? 'text-yellow-400' :
                                         'text-orange-400'
                                     }`}>
-                                        <span>
+                                         <span>
                                             {report.trend.breakStatus === 'VALID_BREAK' ? '🚨 确认破位 (有效跌破)' : 
                                              report.trend.breakStatus === 'SUSPECT_TRAP' ? '📉 疑似诱空 (假摔)' : 
                                              '🛡️ 安全绳 (ATR止损)'}
@@ -1595,13 +1597,13 @@ export default function App() {
                                         report.trend.breakStatus === 'SUSPECT_TRAP' ? 'text-yellow-200/80' : 
                                         'text-orange-200/70'
                                     }`}>
-                                        {report.trend.breakStatus === 'VALID_BREAK' 
+                                         {report.trend.breakStatus === 'VALID_BREAK' 
                                             ? '趋势确认反转，不要幻想，立即止损。' 
                                             : report.trend.breakStatus === 'SUSPECT_TRAP' 
                                             ? '跌破安全绳但指标超卖，可能为主力扫损骗线，建议观察收盘价。'
                                             : '价格运行在安全区域，持有观察。'
                                         }
-                                    </div>
+                                     </div>
                                 </div>
                             </div>
                         )}
@@ -1612,7 +1614,7 @@ export default function App() {
                                 <span className="text-[10px] text-gray-500">{report.trend.strengthLevel}</span>
                             </div>
                             
-                            <div className="space-y-2">
+                             <div className="space-y-2">
                                 <div className="flex justify-between text-[9px]">
                                   <span className="text-gray-400">趋势强度</span>
                                   <span className={
@@ -1639,7 +1641,7 @@ export default function App() {
                         </div>
                         
                         <div className="p-3 rounded border border-purple-900/30 bg-purple-900/10">
-                            <div className="text-[10px] text-purple-400 mb-1 font-bold">波段建议</div>
+                             <div className="text-[10px] text-purple-400 mb-1 font-bold">波段建议</div>
                             <p className="text-xs text-gray-400 leading-relaxed">{report.trend.advice}</p>
                         </div>
                     </>
